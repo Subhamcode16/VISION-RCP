@@ -64,7 +64,9 @@ interface RCPState {
 
   /* UI */
   activeTab: 'terminal' | 'graph' | 'audit' | 'agent';
+  isSidebarOpen: boolean;
   setActiveTab: (t: 'terminal' | 'graph' | 'audit' | 'agent') => void;
+  setIsSidebarOpen: (open: boolean) => void;
 
   /* Audit */
   packetLog: { type: 'in' | 'out', cmd: string, payload: any, ts: number }[];
@@ -206,7 +208,9 @@ export const useStore = create<RCPState>()(
 
   /* UI */
   activeTab: 'terminal',
+  isSidebarOpen: false,
   setActiveTab: (activeTab) => set({ activeTab }),
+  setIsSidebarOpen: (isSidebarOpen) => set({ isSidebarOpen }),
 
   /* Audit */
   packetLog: [],

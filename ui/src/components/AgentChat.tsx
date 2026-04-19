@@ -1,26 +1,35 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../lib/store';
 import { useRCP } from '../hooks/useRCP';
 import { useToastStore } from '../lib/toastStore';
+import { 
+  Bot, 
+  Terminal as TerminalIcon, 
+  Trash2, 
+  ArrowDown, 
+  MessagesSquare,
+  ShieldAlert,
+  Loader2,
+  Zap
+} from 'lucide-react';
 import './AgentChat.css';
+import AiChatInput from './ui/ai-chat-input';
 
 interface AgentChatProps {
   rcp: ReturnType<typeof useRCP>;
 }
 
 export function AgentChat({ rcp }: AgentChatProps) {
-  const { agent, clearAgentMessages } = useStore();
+  const { agent, clearAgentMessages, connectionStatus } = useStore();
   const addToast = useToastStore((s) => s.addToast);
-  const [inputValue, setInputValue] = useState('');
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isStarting, setIsStarting] = useState(false);
 
   const scrollToBottom = useCallback(() => {
     if (isAutoScroll) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [isAutoScroll]);
 
@@ -32,32 +41,26 @@ export function AgentChat({ rcp }: AgentChatProps) {
     const container = messagesContainerRef.current;
     if (!container) return;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
     setIsAutoScroll(isNearBottom);
   };
 
-  const handleSend = async () => {
-    const message = inputValue.trim();
-    if (!message) return;
-
+  const handleSendMessage = async (message: string) => {
     const activeAdapter = agent.activeAdapter;
-    if (!activeAdapter || agent.status !== 'running') return;
+    if (!activeAdapter || agent.status === 'idle') {
+      addToast("Please connect to an agent first", "info");
+      return;
+    }
 
-    setInputValue('');
-
-    // Handle internal UI commands only
-    if (message === '/clear') {
+    if (message.trim() === '/clear') {
        clearAgentMessages();
        return;
     }
 
-    // Forward message to agent
-    // No auto-start here; user must connect manually via the header button if idle
-
-    // Echo user input in the terminal log
+    // Append user message to store (internal UI update)
     useStore.getState().appendAgentMessage({
       type: 'AGENT_MESSAGE',
-      content: `> ${message}`,
+      content: `> ${message}`, // Keep prefix for logic, UI will strip it
       timestamp: Date.now()
     });
 
@@ -65,7 +68,6 @@ export function AgentChat({ rcp }: AgentChatProps) {
       try {
         await rcp.sendAgentMessage(activeAdapter, message);
       } catch (err) {
-        // Log Error locally
         useStore.getState().appendAgentMessage({
           type: 'AGENT_MESSAGE',
           content: `!!! ERROR: ${err instanceof Error ? err.message : String(err)}`,
@@ -78,16 +80,16 @@ export function AgentChat({ rcp }: AgentChatProps) {
   const handleStart = async () => {
     if (agent.activeAdapter && !isStarting) {
       setIsStarting(true);
-      addToast(`Connecting to ${agent.activeAdapter}...`, 'info');
+      addToast(`Initializing ${agent.activeAdapter}...`, 'info');
       try {
         const response = await rcp.startAgent(agent.activeAdapter);
         if (response.type === 'error') {
           throw new Error(response.error?.message || 'Failed to start agent');
         }
-        addToast(`Agent ${agent.activeAdapter} connected successfully.`, 'success');
+        addToast(`Agent ${agent.activeAdapter} online.`, 'success');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        addToast(`Connection failed: ${msg}`, 'error');
+        addToast(`Initialization failed: ${msg}`, 'error');
         useStore.getState().appendAgentMessage({
           type: 'AGENT_MESSAGE',
           content: `!!! CONNECTION FAILED: ${msg}`,
@@ -100,16 +102,9 @@ export function AgentChat({ rcp }: AgentChatProps) {
   };
 
   const getFriendlyName = (name: string | null) => {
-    if (name === 'antigravity') return 'Antigravity Chat Agent';
-    if (name === 'antigravity-agent') return 'Antigravity Terminal Bridge';
-    return name?.toUpperCase() || 'NO AGENT SELECTED';
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (name === 'antigravity') return 'Vision Agent';
+    if (name === 'antigravity-agent') return 'Terminal Link';
+    return name || 'Unselected';
   };
 
   const handleApproval = async (decision: boolean) => {
@@ -119,26 +114,28 @@ export function AgentChat({ rcp }: AgentChatProps) {
   };
 
   return (
-    <div className="agent-chat">
+    <div className="agent-chat animate-fade-in">
       <div className="agent-chat__header">
         <div className="agent-chat__title">
+          <Bot size={18} className="text-zinc-500" />
           <span>{getFriendlyName(agent.activeAdapter)}</span>
           {agent.activeAdapter && (
-            <span className="agent-chat__adapter-badge">{agent.activeAdapter.toUpperCase()}</span>
+            <span className="agent-chat__adapter-badge">{agent.activeAdapter}</span>
           )}
         </div>
         <div className="agent-chat__header-actions">
           <div className={`agent-chat__status ${agent.status}`}>
             <span className={`agent-chat__status-dot ${agent.status !== 'idle' ? 'active' : ''}`}></span>
-            {agent.status.toUpperCase()}
+            <span className="tracking-widest uppercase text-[9px] font-bold">
+              {agent.status.replace('_', ' ')}
+            </span>
           </div>
           <button 
-            className="agent-chat__header-btn" 
+            className="p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-zinc-500 hover:text-zinc-100"
             onClick={() => clearAgentMessages()}
             title="Clear Buffer"
-            style={{ background: 'transparent', border: 'none', color: '#444', cursor: 'pointer', fontSize: '10px' }}
           >
-            [CLEAR]
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
@@ -151,45 +148,52 @@ export function AgentChat({ rcp }: AgentChatProps) {
         {agent.activeAdapter && agent.status === 'idle' ? (
           <div className="agent-chat__onboarding">
             <div className="agent-chat__onboarding-icon">
-              {agent.activeAdapter.includes('agent') ? '🐚' : '💬'}
+              {agent.activeAdapter.includes('agent') ? <TerminalIcon size={48} /> : <Bot size={48} />}
             </div>
             <h3>{getFriendlyName(agent.activeAdapter)}</h3>
-            <p>Connection is currently inactive. Click below to initialize the link.</p>
+            <p className="text-zinc-400">Connection to the remote agent interface is currently offline.</p>
             <button 
-              className="btn btn--accent" 
+              className="mt-4 flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20" 
               onClick={handleStart}
-              disabled={isStarting}
+              disabled={isStarting || connectionStatus !== 'connected'}
             >
               {isStarting ? (
-                <span className="agent-chat__spinner"></span>
+                <Loader2 size={18} className="animate-spin" />
               ) : (
-                'CONNECT TO AGENT'
+                <>
+                  <Zap size={16} fill="currentColor" />
+                  <span>INITIALIZE LINK</span>
+                </>
               )}
             </button>
           </div>
         ) : agent.messages.length === 0 ? (
-          <div className="agent-chat__message agent" style={{ color: '#404040', padding: '20px' }}>
-            Vision-RCP v2.0 Ready.
-            Waiting for input...
+          <div className="flex flex-col items-center justify-center h-full opacity-20 pointer-events-none">
+             <MessagesSquare size={64} className="mb-4" />
+             <p className="font-mono text-xs uppercase tracking-widest">Awaiting interaction...</p>
           </div>
         ) : (
           agent.messages.map((msg, idx) => {
             const isUser = msg.content.startsWith('>');
-            const content = msg.content;
+            const isError = msg.content.startsWith('!');
+            const content = isUser ? msg.content.slice(1).trim() : msg.content;
             
             if (msg.type === 'APPROVAL_REQUEST') {
               return (
                 <div key={idx} className="agent-chat__message-wrapper">
-                   <div className="agent-chat__message approval">
-                     <div className="agent-chat__approval-title">AUTH REQUIRED</div>
-                     <div>{content}</div>
+                   <div className="agent-chat__message approval animate-fade-in">
+                     <div className="agent-chat__approval-title">
+                       <ShieldAlert size={18} />
+                       <span>AUTHORIZATION REQUIRED</span>
+                     </div>
+                     <div className="text-zinc-300 text-sm leading-relaxed">{content}</div>
                      {agent.status === 'awaiting_approval' && idx === agent.messages.length - 1 && (
                        <div className="agent-chat__approval-actions">
                          <button onClick={() => handleApproval(true)} className="agent-chat__approval-btn agent-chat__approval-btn--approve">
-                           [ACCEPT]
+                           ACCEPTDECISION
                          </button>
                          <button onClick={() => handleApproval(false)} className="agent-chat__approval-btn agent-chat__approval-btn--reject">
-                           [REJECT]
+                           REJECT
                          </button>
                        </div>
                      )}
@@ -201,8 +205,8 @@ export function AgentChat({ rcp }: AgentChatProps) {
             if (content === '--- ACK ---') return null;
 
             return (
-              <div key={idx} className="agent-chat__message-wrapper">
-                <div className={`agent-chat__message ${isUser ? 'user' : 'agent'}`}>
+              <div key={idx} className={`agent-chat__message-wrapper ${isUser ? 'user' : 'agent'}`}>
+                <div className={`agent-chat__message ${isUser ? 'user' : isError ? 'log' : 'agent'}`}>
                   {content}
                 </div>
               </div>
@@ -214,24 +218,15 @@ export function AgentChat({ rcp }: AgentChatProps) {
 
       {!isAutoScroll && (
         <button className="agent-chat__scroll-btn" onClick={() => setIsAutoScroll(true)}>
-          ↓
+          <ArrowDown size={16} />
         </button>
       )}
 
       <div className="agent-chat__input-area">
-        <div className="agent-chat__input-container">
-          <span className="agent-chat__prompt-symbol">&gt;</span>
-          <textarea
-            id="agent-chat-input"
-            ref={inputRef}
-            className="agent-chat__textarea"
-            placeholder={agent.status === 'awaiting_approval' ? "" : "..."}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={agent.status === 'awaiting_approval'}
-          />
-        </div>
+        <AiChatInput 
+          onSendMessage={handleSendMessage}
+          isLoading={isStarting || agent.status === 'awaiting_approval'}
+        />
       </div>
     </div>
   );

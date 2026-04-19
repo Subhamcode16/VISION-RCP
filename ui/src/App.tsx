@@ -1,13 +1,8 @@
-/**
- * Vision-RCP App — Root application component.
- */
-
 import { useEffect, useState } from 'react';
 import { useRCP } from './hooks/useRCP';
 import { useStore } from './lib/store';
 import { AuthGate } from './components/AuthGate';
 import { Layout } from './components/Layout';
-import { ProcessList } from './components/ProcessList';
 import { AgentChat } from './components/AgentChat';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
@@ -49,8 +44,8 @@ function getInitialParams() {
 }
 
 function App() {
-  const { auth, session, connectionStatus, activeTab } = useStore();
-  const [sessionParams, setSessionParams] = useState(getInitialParams());
+  const { auth, connectionStatus, activeTab } = useStore();
+  const [sessionParams] = useState(getInitialParams());
 
   // Effect handles side-effects like cleaning URL or updating storage
   useEffect(() => {
@@ -59,16 +54,15 @@ function App() {
     const t = urlParams.get('t');
     const r = urlParams.get('r');
     const k = urlParams.get('k');
+    const a = urlParams.get('a');
 
-      const a = urlParams.get('a');
-
-      if (s || t || r || k || a) {
-        localStorage.setItem('vision_rcp_session', JSON.stringify(sessionParams));
-        // Clean URL without refreshing
-        const cleanUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
-      }
-  }, []);
+    if (s || t || r || k || a) {
+      localStorage.setItem('vision_rcp_session', JSON.stringify(sessionParams));
+      // Clean URL without refreshing
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, [sessionParams]);
 
   const { sessionId, relayToken, customRelay, secretKey, agentName } = sessionParams;
 
@@ -115,21 +109,8 @@ function App() {
     }
   };
 
-  const handleKill = async (pid: number) => {
-    try {
-      await send('process.kill', { pid });
-    } catch {
-      // Error handled by store
-    }
-  };
-
-  const handleRestart = async (pid: number) => {
-    try {
-      await send('process.restart', { pid });
-    } catch {
-      // Error handled by store
-    }
-  };
+  /* Unused process command handlers removed for cleanup */
+  void send;
 
   if (!auth.isAuthenticated) {
     return (
@@ -158,6 +139,5 @@ function App() {
     </>
   );
 }
-
 
 export default App;

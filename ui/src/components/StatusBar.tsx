@@ -1,67 +1,55 @@
-/**
- * Vision-RCP StatusBar — Bottom bar showing connection status, system metrics, latency.
- */
-
 import { useStore } from '../lib/store';
+import { 
+  Wifi, 
+  WifiOff, 
+  Activity, 
+  Hash, 
+  Clock,
+  ShieldCheck,
+  Globe
+} from 'lucide-react';
 import './StatusBar.css';
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(0)} ${units[i]}`;
-}
-
 export function StatusBar() {
-  const { connectionStatus, latency, systemInfo, processes, auth } = useStore();
-
-  const statusClass =
-    connectionStatus === 'connected' ? 'live' :
-    connectionStatus === 'connecting' ? 'starting' :
-    connectionStatus === 'error' ? 'error' : 'idle';
-
-  const runningCount = processes.filter((p) => p.state === 'running').length;
+  const { session, connectionStatus, systemInfo } = useStore();
+  const isRemote = !!session?.sessionId;
+  const cpu = systemInfo?.cpu_percent || 0;
+  const ram = systemInfo ? (systemInfo.memory_used / (1024 * 1024)) : 0;
 
   return (
-    <footer className="status-bar">
+    <div className="status-bar animate-fade-in">
       <div className="status-bar__left">
-        <span className="status-bar__item">
-          <span className={`status-dot status-dot--${statusClass}`} />
-          <span className="mono text-xs">{connectionStatus.toUpperCase()}</span>
-        </span>
-
-        {auth.isAuthenticated && (
-          <span className="status-bar__item text-xs text-muted">
-            ● AUTHENTICATED
-          </span>
-        )}
+        <div className="status-bar__item">
+          {connectionStatus === 'connected' ? (
+            <Wifi size={12} className="text-emerald-500" />
+          ) : (
+            <WifiOff size={12} className="text-red-500" />
+          )}
+          <span className="uppercase">{connectionStatus}</span>
+        </div>
+        <div className="status-bar__item">
+          {isRemote ? <Globe size={12} /> : <ShieldCheck size={12} />}
+          <span>{isRemote ? 'REMOTE_RELAY' : 'LOCAL_HOST'}</span>
+        </div>
       </div>
 
       <div className="status-bar__center">
-        <span className="status-bar__item text-xs mono">
-          {runningCount} running / {processes.length} total
-        </span>
+        <div className="status-bar__item">
+           <Activity size={12} className="text-zinc-600" />
+           <span>CPU: {cpu.toFixed(1)}%</span>
+        </div>
+        <div className="status-bar__item">
+           <Hash size={12} className="text-zinc-600" />
+           <span>MEM: {ram.toFixed(0)}MB</span>
+        </div>
       </div>
 
       <div className="status-bar__right">
-        {systemInfo && (
-          <>
-            <span className="status-bar__item text-xs mono">
-              CPU {systemInfo.cpu_percent.toFixed(0)}%
-            </span>
-            <span className="status-bar__item text-xs mono">
-              MEM {formatBytes(systemInfo.memory_used)} / {formatBytes(systemInfo.memory_total)}
-              ({systemInfo.memory_percent.toFixed(0)}%)
-            </span>
-            <span className="status-bar__item text-xs mono">
-              {systemInfo.hostname}
-            </span>
-          </>
-        )}
-        <span className="status-bar__item text-xs mono text-muted">
-          {latency}ms
-        </span>
+        <div className="status-bar__item">
+          <Clock size={12} />
+          <span>v2.0.4-STABLE</span>
+        </div>
       </div>
-    </footer>
+    </div>
   );
 }

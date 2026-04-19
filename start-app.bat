@@ -1,69 +1,95 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
+
+:: ==========================================================
+::  V I S I O N - R C P
+::  Local Agent Control Plane (Modernized Build)
+:: ==========================================================
 
 echo.
-echo  ╦  ╦╦╔═╗╦╔═╗╔╗╔   ╦═╗╔═╗╔═╗
-echo  ╚╗╔╝║╚═╗║║ ║║║║───╠╦╝║  ╠═╝
-echo   ╚╝ ╩╚═╝╩╚═╝╝╚╝   ╩╚═╚═╝╩
-echo   Local Agent Control Plane
+echo  [38;5;255m▄   ▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄▄ ▄   ▄  [38;5;240m▄▄▄▄  ▄▄▄▄ ▄▄▄▄ 
+echo  [38;5;255m█   █   █   █     █   █ █   █ █▄  █  [38;5;240m█   █ █    █   █
+echo  [38;5;255m █ █    █   ▀▀▀▀▄ █   █ █   █ █ █ █  [38;5;240m█▄▄▄▀ █    █▄▄▄▀
+echo  [38;5;255m █ █    █       █ █   █ █   █ █  ▀█  [38;5;240m█  █  █    █    
+echo  [38;5;255m  █   ▄▄▄▄▄ ▄▄▄▄▄▀ ▀▄▄▄▀ ▀▄▄▄▀ █   █  [38;5;240m█   █ ▀▄▄▄ █    
+echo.
+echo  [38;5;244mPremium Local Agent Dashboard │ Build v1.1-zinc[0m
 echo.
 
 :: Get script directory
 set "SCRIPT_DIR=%~dp0"
+set "DATA_DIR=%USERPROFILE%\.vision-rcp"
 
-:: Check Python
-where python >nul 2>nul
-if errorlevel 1 (
-    echo [ERROR] Python not found. Please install Python 3.11+
-    pause
-    exit /b 1
+:: --- PORT CONFLICT DETECTION ---
+echo [SYSTEM] Checking for port conflicts...
+for %%p in (9077 8080 5173) do (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :%%p ^| findstr LISTENING') do (
+        echo [WARN] Port %%p is busy by PID %%a. Clearing...
+        taskkill /F /PID %%a >nul 2>&1
+    )
 )
 
-:: Check if venv exists, create if not
-if not exist "%SCRIPT_DIR%daemon\.venv" (
-    echo [SETUP] Creating Python virtual environment...
+:: --- DEPENDENCY CHECK ---
+if "%1"=="setup" (
+    echo [SETUP] Force-refreshing all dependencies...
+    set "FORCE_SETUP=true"
+)
+
+:: Python Setup
+if not exist "%SCRIPT_DIR%daemon\.venv" set "FORCE_SETUP=true"
+if "!FORCE_SETUP!"=="true" (
+    echo [PYTHON] Initializing virtual environment...
     python -m venv "%SCRIPT_DIR%daemon\.venv"
     call "%SCRIPT_DIR%daemon\.venv\Scripts\activate.bat"
-    pip install -r "%SCRIPT_DIR%daemon\requirements.txt" -q
+    pip install -r "%SCRIPT_DIR%daemon\requirements.txt"
 ) else (
     call "%SCRIPT_DIR%daemon\.venv\Scripts\activate.bat"
 )
 
-:: Check Node.js for UI
-where node >nul 2>nul
-if errorlevel 1 (
-    echo [WARNING] Node.js not found. UI will not be available.
-    echo [WARNING] Install Node.js to use the web interface.
-    goto :start_daemon
-)
-
-:: Install UI dependencies if needed
-if not exist "%SCRIPT_DIR%ui\node_modules" (
-    echo [SETUP] Installing UI dependencies...
+:: UI Setup
+if not exist "%SCRIPT_DIR%ui\node_modules" set "FORCE_UI_SETUP=true"
+if "!FORCE_UI_SETUP!"=="true" (
+    echo [NODE] Installing modernized UI dependencies...
     cd /d "%SCRIPT_DIR%ui"
-    npm install -q 2>nul
+    npm install
     cd /d "%SCRIPT_DIR%"
 )
 
-:: Start UI dev server in a new window
-echo [START] Launching UI dev server...
+:: --- AUTH SECRET DISCOVERY ---
+echo [AUTH] Fetching security token...
+set "SECRET_KEY=LOCAL"
+if exist "%DATA_DIR%\secret.key" (
+    set /p SECRET_KEY=<"%DATA_DIR%\secret.key"
+)
+
+:: --- LAUNCH ---
+echo [START] Launching full stack...
+
+:: 1. Start UI Dev Server
 start "Vision-RCP UI" cmd /c "cd /d %SCRIPT_DIR%ui && npm run dev"
 
-:: Start Relay server in a new window (for Remote/Phone access)
-echo [START] Launching Relay server...
+:: 2. Start Relay Server
 start "Vision-RCP Relay" cmd /c "call %SCRIPT_DIR%daemon\.venv\Scripts\activate.bat && python -m relay.server"
 
-:: Start timer
-set "START_TIME=%TIME%"
+:: 3. Launch App Window (Wait for UI to warm up)
+echo [WAIT] Waiting for Vite server init...
+timeout /t 3 /nobreak >nul
 
-:: Start daemon
-echo [START] Launching daemon...
+set "DASHBOARD_URL=http://localhost:5173/?k=%SECRET_KEY%"
+echo [BROWSER] Opening Dashboard in App Mode...
 
-:: Calculate and display startup pulse (crude cmd approximation)
-echo [PULSE] Batch scripts ready in ~1s
-echo.
+:: Try Edge in App Mode first (most compatible on Windows)
+start msedge --app="%DASHBOARD_URL%" >nul 2>&1
+if errorlevel 1 (
+    :: Fallback to standard start
+    start "" "%DASHBOARD_URL%"
+)
 
+:: 4. Start Daemon (Main Window)
+echo [START] Launching Local Daemon...
 cd /d "%SCRIPT_DIR%daemon"
 python -m src.main --config config.toml
 
-PAUSE
+echo.
+echo [DONE] Dashboard session active.
+pause

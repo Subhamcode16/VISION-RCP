@@ -3,6 +3,7 @@
  */
 
 import React, { type ReactNode } from 'react';
+import { Menu } from 'lucide-react';
 import { useStore } from '../lib/store';
 import './Layout.css';
 
@@ -13,12 +14,19 @@ interface LayoutProps {
 }
 
 export function Layout({ sidebar, main, statusBar }: LayoutProps) {
-  const { session, connectionStatus } = useStore();
+  const { session, connectionStatus, isSidebarOpen, setIsSidebarOpen } = useStore();
 
   return (
-    <div className={`layout ${connectionStatus}`}>
+    <div className={`layout ${connectionStatus} ${isSidebarOpen ? 'sidebar-open' : ''}`}>
       <header className="layout__topbar">
         <div className="layout__brand">
+          <button 
+            className="layout__menu-toggle"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Toggle Sidebar"
+          >
+            <Menu size={20} />
+          </button>
           <span className="layout__icon">⬡</span>
           <span className="layout__title mono">VISION-RCP</span>
         </div>
@@ -51,8 +59,12 @@ export function Layout({ sidebar, main, statusBar }: LayoutProps) {
       </header>
 
       <div className="layout__body">
+        <div 
+          className={`layout__overlay ${isSidebarOpen ? 'active' : ''}`}
+          onClick={() => setIsSidebarOpen(false)}
+        />
         {sidebar && (sidebar as any).type !== React.Fragment && (
-          <aside className="layout__sidebar">{sidebar}</aside>
+          <aside className={`layout__sidebar ${isSidebarOpen ? 'active' : ''}`}>{sidebar}</aside>
         )}
         <main className="layout__main">{main}</main>
       </div>

@@ -3,29 +3,51 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background-color: #000; /* Pitch black for terminal content focus */
 }
 
 .terminal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 20px;
+  background: rgba(9, 9, 11, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--zinc-900);
   flex-shrink: 0;
+  z-index: 20;
 }
 
 .terminal-header__title {
-  color: var(--text-muted);
-  letter-spacing: 1px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--zinc-500);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .terminal-body {
   flex: 1;
-  padding: var(--space-2);
+  padding: 12px;
   overflow: hidden;
 }
 
 .terminal-body .xterm {
   height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Scrollbar customization for XTerm area */
+.xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--zinc-800);
 }

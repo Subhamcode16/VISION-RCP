@@ -1,8 +1,5 @@
-/**
- * Vision-RCP Terminal — xterm.js wrapper for process output streaming.
- */
-
 import { useEffect, useRef } from 'react';
+import { useRCP } from '../hooks/useRCP';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -36,7 +33,12 @@ const THEME = {
   brightWhite: '#FFFFFF',
 };
 
-export function Terminal() {
+interface TerminalProps {
+  rcp: ReturnType<typeof useRCP>;
+}
+
+export function Terminal({ rcp }: TerminalProps) {
+  void rcp;
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);

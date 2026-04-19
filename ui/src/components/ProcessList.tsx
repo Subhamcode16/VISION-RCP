@@ -3,7 +3,7 @@
  */
 
 import { useStore } from '../lib/store';
-import type { ProcessState, ProcessInfo } from '../lib/protocol';
+import type { ProcessState } from '../lib/protocol';
 import './ProcessList.css';
 
 interface ProcessListProps {

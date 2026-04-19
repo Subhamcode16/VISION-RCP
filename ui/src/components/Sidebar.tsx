@@ -1,6 +1,14 @@
-import React from 'react';
 import { useStore } from '../lib/store';
 import { useRCP } from '../hooks/useRCP';
+import { 
+  Bot, 
+  Terminal, 
+  Activity, 
+  Cpu,
+  Wifi,
+  WifiOff,
+  X
+} from 'lucide-react';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -8,18 +16,27 @@ interface SidebarProps {
 }
 
 export function Sidebar({ rcp }: SidebarProps) {
-  const { session, agent, activeTab, setActiveTab, setActiveAdapter } = useStore();
+  void rcp;
+  const { 
+    session, 
+    agent, 
+    activeTab, 
+    setActiveTab, 
+    setActiveAdapter, 
+    connectionStatus,
+    setIsSidebarOpen 
+  } = useStore();
   const availableAgents = session?.availableAgents || [];
 
   const getIcon = (name: string) => {
-    if (name.includes('pty') || name.includes('agent')) return '🐚';
-    return '💬';
+    if (name.includes('pty') || name.includes('agent')) return <Terminal size={18} />;
+    return <Bot size={18} />;
   };
 
   const getName = (name: string) => {
-    if (name === 'antigravity') return 'Chat Agent';
-    if (name === 'antigravity-agent') return 'Terminal Bridge';
-    return name;
+    if (name === 'antigravity') return 'Vision Agent';
+    if (name === 'antigravity-agent') return 'Terminal Link';
+    return name.charAt(0).toUpperCase() + name.slice(1);
   };
 
   const handleSelect = (name: string) => {
@@ -29,9 +46,19 @@ export function Sidebar({ rcp }: SidebarProps) {
   };
 
   return (
-    <div className="sidebar">
+    <div className="sidebar animate-fade-in">
+      <div className="sidebar__mobile-header">
+        <span className="sidebar__mobile-title mono">MENU</span>
+        <button 
+          className="sidebar__close-btn"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          <X size={20} />
+        </button>
+      </div>
+      {/* Agents Section */}
       <div className="sidebar__section">
-        <div className="sidebar__label mono">AGENTS</div>
+        <div className="sidebar__label">Agents</div>
         <div className="sidebar__list">
           {availableAgents.map((name) => (
             <div
@@ -40,52 +67,72 @@ export function Sidebar({ rcp }: SidebarProps) {
               onClick={() => {
                 handleSelect(name);
                 setActiveTab('agent');
+                setIsSidebarOpen(false);
               }}
             >
               <span className="sidebar__item-icon">{getIcon(name)}</span>
               <span className="sidebar__item-name">{getName(name)}</span>
-              {agent.activeAdapter === name && agent.status === 'running' && (
-                <span className="sidebar__status-indicator active" />
-              )}
+              <span className={`sidebar__status-indicator ${agent.activeAdapter === name && agent.status === 'running' ? 'active' : ''}`} />
             </div>
           ))}
+          {availableAgents.length === 0 && (
+            <div className="text-[11px] text-zinc-600 px-3 py-2 italic">No agents found</div>
+          )}
         </div>
       </div>
 
+      {/* Tools Section */}
       <div className="sidebar__section">
-        <div className="sidebar__label mono">TOOLS</div>
+        <div className="sidebar__label">System Tools</div>
         <div className="sidebar__list">
           <div 
             className={`sidebar__item ${activeTab === 'audit' ? 'active' : ''}`}
-            onClick={() => setActiveTab('audit')}
+            onClick={() => {
+              setActiveTab('audit');
+              setIsSidebarOpen(false);
+            }}
           >
-            <span className="sidebar__item-icon">🔍</span>
+            <span className="sidebar__item-icon"><Activity size={18} /></span>
             <span className="sidebar__item-name">Flow Audit</span>
           </div>
           <div 
             className={`sidebar__item ${activeTab === 'terminal' ? 'active' : ''}`}
-            onClick={() => setActiveTab('terminal')}
+            onClick={() => {
+              setActiveTab('terminal');
+              setIsSidebarOpen(false);
+            }}
           >
-            <span className="sidebar__item-icon">💻</span>
-            <span className="sidebar__item-name">Terminal</span>
+            <span className="sidebar__item-icon"><Terminal size={18} /></span>
+            <span className="sidebar__item-name">Root Terminal</span>
           </div>
         </div>
       </div>
 
       <div className="sidebar__section sidebar__section--spacer" />
 
+      {/* Connection Info */}
       <div className="sidebar__section">
-        <div className="sidebar__label mono">CONNECTION</div>
+        <div className="sidebar__label">Infrastructure</div>
         <div className="sidebar__connection-details">
           <div className="sidebar__detail">
-            <span className="sidebar__detail-label">Port:</span>
-            <span className="sidebar__detail-value mono">9077</span>
+            <span className="sidebar__detail-label">Port</span>
+            <span className="sidebar__detail-value">9077</span>
           </div>
           <div className="sidebar__detail">
-            <span className="sidebar__detail-label">Status:</span>
-            <span className={`sidebar__detail-value mono ${useStore.getState().connectionStatus}`}>
-              {useStore.getState().connectionStatus.toUpperCase()}
-            </span>
+            <span className="sidebar__detail-label">Engine</span>
+            <div className="flex items-center gap-1.5 sidebar__detail-value">
+              <Cpu size={10} className="text-zinc-500" />
+              <span>RCP-v2</span>
+            </div>
+          </div>
+          <div className="sidebar__detail">
+            <span className="sidebar__detail-label">Status</span>
+            <div className={`flex items-center gap-1.5 sidebar__detail-value ${connectionStatus}`}>
+              {connectionStatus === 'connected' ? <Wifi size={12} /> : <WifiOff size={12} />}
+              <span className="uppercase tracking-wider font-bold text-[9px]">
+                {connectionStatus}
+              </span>
+            </div>
           </div>
         </div>
       </div>

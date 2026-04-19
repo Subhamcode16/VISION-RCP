@@ -1,4 +1,3 @@
-import React from 'react';
 import { useToastStore } from '../lib/toastStore';
 import { Toast } from './Toast';
 

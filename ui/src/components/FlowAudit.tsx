@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '../lib/store';
 import { Terminal, Shield, Activity, Trash2 } from 'lucide-react';
 import './FlowAudit.css';
@@ -50,7 +50,7 @@ export function FlowAudit() {
           >
             <div className="flow-audit__packet-meta">
               <span className="flow-audit__timestamp">
-                {new Date(p.ts).toLocaleTimeString('en-US', { hour12: false, fractionalSecondDigits: 2 })}
+                {new Date(p.ts).toLocaleTimeString('en-US', { hour12: false })}
               </span>
               
               <span className="flow-audit__type">

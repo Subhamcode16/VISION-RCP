@@ -1,4 +1,3 @@
-import React from 'react';
 import { ToastItem, useToastStore } from '../lib/toastStore';
 import './Toast.css';
 

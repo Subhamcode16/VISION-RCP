@@ -7,7 +7,7 @@ import { createCommand, type CommandType, type Envelope, type LogLine, type Proc
 import { useStore } from '../lib/store';
 import { useToastStore } from '../lib/toastStore';
 
-const HEARTBEAT_TIMEOUT = 60_000;
+/* HEARTBEAT_TIMEOUT removed / unused */
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30_000;
 const COMMAND_TIMEOUT = 30_000;
@@ -15,7 +15,7 @@ const COMMAND_TIMEOUT = 30_000;
 export function useRCP(url: string, sessionId?: string, relayToken?: string) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempt = useRef(0);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingRequests = useRef<Map<string, {
     resolve: (v: Envelope) => void;
     reject: (e: Error) => void;
@@ -23,7 +23,7 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
     command: CommandType;
     payload: Record<string, unknown>;
   }>>(new Map());
-  const pingTimer = useRef<ReturnType<typeof setInterval>>();
+  const pingTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const isRefreshing = useRef(false);
 
   const {
@@ -155,14 +155,12 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
       setLatency(Math.abs(latency));
     }
 
-    // Always log to audit unless it is a heartbeat
-    if (envelope.type !== 'heartbeat') {
-      appendPacket({ 
-        type: 'in', 
-        cmd: envelope.command || (envelope.type as string), 
-        payload: envelope.payload || envelope.error || {} 
-      });
-    }
+    // Always log to audit
+    appendPacket({ 
+      type: 'in', 
+      cmd: envelope.command || (envelope.type as string), 
+      payload: envelope.payload || envelope.error || {} 
+    });
   };
 
   const cleanup = () => {
@@ -331,10 +329,17 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
   useEffect(() => {
     if (!auth.isAuthenticated) return;
 
-    refreshProcessList();
-    refreshSystemInfo();
-    refreshGraphStatus();
-    refreshSessionInfo();
+    // Helper to safely run background sync tasks
+    const sync = () => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      refreshProcessList().catch(() => {});
+      refreshSystemInfo().catch(() => {});
+      refreshGraphStatus().catch(() => {});
+      refreshSessionInfo().catch(() => {});
+    };
+
+    // Initial sync
+    sync();
 
     const interval = setInterval(() => {
       // Silent background refresh check
@@ -342,9 +347,7 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
         refreshTokens().catch(() => {});
       }
 
-      refreshProcessList();
-      refreshSystemInfo();
-      refreshSessionInfo();
+      sync();
     }, 5000);
 
     return () => clearInterval(interval);
