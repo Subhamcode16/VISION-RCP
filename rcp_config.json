@@ -1,0 +1,11 @@
+{
+  "workspace_path": "C:\\Users\\User\\OneDrive\\Desktop\\PERSONAL\\antigravity",
+  "default_gate": false,
+  "clean_output": true,
+    "use_sdk": false,
+  "automation": {
+    "window_title_re": ".*Antigravity.*",
+    "polling_interval_ms": 500,
+    "backend": "uia"
+  }
+}

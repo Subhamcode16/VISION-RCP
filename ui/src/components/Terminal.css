@@ -1,0 +1,31 @@
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.terminal-header__title {
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.terminal-body {
+  flex: 1;
+  padding: var(--space-2);
+  overflow: hidden;
+}
+
+.terminal-body .xterm {
+  height: 100%;
+}

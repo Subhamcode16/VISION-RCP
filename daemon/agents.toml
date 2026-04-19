@@ -1,0 +1,9 @@
+# Vision-RCP Agent Configurations
+
+# Legacy script-based adapter (Polymarket bots)
+[antigravity]
+adapter = "antigravity"
+project_path = "c:/Users/User/OneDrive/Desktop/PERSONAL/antigravity"
+tasks.scout = "market_scout.py"
+tasks.signals = "signal_engine.py"
+tasks.risk = "risk_manager.py"

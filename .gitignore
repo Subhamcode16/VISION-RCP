@@ -1,0 +1,38 @@
+# Vision-RCP Global Ignore Rules
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.so
+**/.venv/
+**/venv/
+**/env/
+**/build/
+**/dist/
+**/*.egg-info/
+
+# Node.js (UI)
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/*.local
+**/package-lock.json
+
+# Vision-RCP Specific
+**/.vision-rcp/
+**/*.log
+**/*.db
+**/*.port
+status.json
+bridge_status.json
+
+# Secrets & Environment
+**/.env
+**/.env.local
+**/.env.*.local
+**/secrets.json
+**/config.toml
+
+# OS Files
+.DS_Store
+Thumbs.db

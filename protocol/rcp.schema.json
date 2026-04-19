@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Vision-RCP Protocol",
+  "description": "Message envelope for the Vision Remote Control Protocol",
+  "definitions": {
+    "MessageType": {
+      "type": "string",
+      "enum": ["command", "response", "stream", "error", "heartbeat"]
+    },
+    "CommandType": {
+      "type": "string",
+      "enum": [
+        "process.spawn",
+        "process.kill",
+        "process.restart",
+        "process.list",
+        "process.status",
+        "process.logs",
+        "graph.start",
+        "graph.stop",
+        "graph.status",
+        "auth.login",
+        "auth.refresh",
+        "auth.logout",
+        "system.info",
+        "system.ping",
+        "audit.query"
+      ]
+    },
+    "ProcessState": {
+      "type": "string",
+      "enum": ["pending", "starting", "running", "stopping", "stopped", "failed", "restarting"]
+    },
+    "StreamType": {
+      "type": "string",
+      "enum": ["stdout", "stderr", "system"]
+    },
+    "Envelope": {
+      "type": "object",
+      "required": ["id", "type", "ts"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique message identifier for request-response correlation"
+        },
+        "type": {
+          "$ref": "#/definitions/MessageType"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp"
+        },
+        "token": {
+          "type": "string",
+          "description": "JWT access token (required for all non-auth commands)"
+        },
+        "command": {
+          "$ref": "#/definitions/CommandType",
+          "description": "Command identifier (required when type=command)"
+        },
+        "ref": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Reference to the original command ID (used in response/stream)"
+        },
+        "payload": {
+          "type": "object",
+          "description": "Command-specific payload"
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "details": { "type": "object" }
+          },
+          "required": ["code", "message"]
+        }
+      }
+    },
+    "ProcessSpawnPayload": {
+      "type": "object",
+      "required": ["name", "cmd"],
+      "properties": {
+        "name": { "type": "string", "description": "Human-readable process name" },
+        "cmd": { "type": "string", "description": "Command to execute" },
+        "args": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "env": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+        "cwd": { "type": "string", "description": "Working directory" },
+        "depends_on": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "auto_restart": { "type": "boolean", "default": false },
+        "max_restarts": { "type": "integer", "default": 5 },
+        "group": { "type": "string", "description": "Process group name" }
+      }
+    },
+    "ProcessKillPayload": {
+      "type": "object",
+      "required": ["pid"],
+      "properties": {
+        "pid": { "type": "integer" },
+        "signal": { "type": "string", "default": "SIGTERM" }
+      }
+    },
+    "ProcessLogsPayload": {
+      "type": "object",
+      "required": ["pid"],
+      "properties": {
+        "pid": { "type": "integer" },
+        "tail": { "type": "integer", "default": 100 },
+        "follow": { "type": "boolean", "default": true }
+      }
+    },
+    "StreamPayload": {
+      "type": "object",
+      "required": ["pid", "stream", "data"],
+      "properties": {
+        "pid": { "type": "integer" },
+        "name": { "type": "string" },
+        "stream": { "$ref": "#/definitions/StreamType" },
+        "data": { "type": "string" },
+        "ts": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AuthLoginPayload": {
+      "type": "object",
+      "required": ["secret"],
+      "properties": {
+        "secret": { "type": "string", "description": "Pre-shared secret key" }
+      }
+    },
+    "AuthResponsePayload": {
+      "type": "object",
+      "required": ["access_token", "expires_at"],
+      "properties": {
+        "access_token": { "type": "string" },
+        "refresh_token": { "type": "string" },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "GraphStartPayload": {
+      "type": "object",
+      "required": ["group"],
+      "properties": {
+        "group": { "type": "string", "description": "Process group name from config" }
+      }
+    },
+    "SystemInfoResponse": {
+      "type": "object",
+      "properties": {
+        "os": { "type": "string" },
+        "platform": { "type": "string" },
+        "hostname": { "type": "string" },
+        "cpu_count": { "type": "integer" },
+        "cpu_percent": { "type": "number" },
+        "memory_total": { "type": "integer" },
+        "memory_used": { "type": "integer" },
+        "memory_percent": { "type": "number" },
+        "disk_total": { "type": "integer" },
+        "disk_used": { "type": "integer" },
+        "disk_percent": { "type": "number" },
+        "uptime": { "type": "number" }
+      }
+    },
+    "AuditQueryPayload": {
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date-time" },
+        "until": { "type": "string", "format": "date-time" },
+        "event_type": { "type": "string" },
+        "limit": { "type": "integer", "default": 100 }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/definitions/Envelope" }
+  ]
+}
