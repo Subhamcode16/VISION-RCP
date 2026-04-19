@@ -14,6 +14,14 @@ import {
 } from 'lucide-react';
 import './AgentChat.css';
 import AiChatInput from './ui/ai-chat-input';
+import agentAvatar from '../assets/vision_agent_logo.png';
+
+const UserAvatar = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full opacity-60">
+    <path d="M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z" fill="currentColor"/>
+    <path d="M12 14C8.68629 14 6 16.6863 6 20H18C18 16.6863 15.3137 14 12 14Z" fill="currentColor"/>
+  </svg>
+);
 
 interface AgentChatProps {
   rcp: ReturnType<typeof useRCP>;
@@ -178,9 +186,19 @@ export function AgentChat({ rcp }: AgentChatProps) {
             const isError = msg.content.startsWith('!');
             const content = isUser ? msg.content.slice(1).trim() : msg.content;
             
+            // Check grouping logic (Option B: First in stack)
+            const isSameAsLastSender = idx > 0 && (
+               (agent.messages[idx-1].content.startsWith('>') === isUser) &&
+               agent.messages[idx-1].type !== 'APPROVAL_REQUEST'
+            );
+            const showAvatar = !isSameAsLastSender;
+
             if (msg.type === 'APPROVAL_REQUEST') {
               return (
-                <div key={idx} className="agent-chat__message-wrapper">
+                <div key={idx} className="agent-chat__message-wrapper agent with-avatar">
+                   <div className="agent-chat__avatar">
+                     <img src={agentAvatar} alt="Agent" className="agent-chat__avatar-img" />
+                   </div>
                    <div className="agent-chat__message approval animate-fade-in">
                      <div className="agent-chat__approval-title">
                        <ShieldAlert size={18} />
@@ -190,7 +208,7 @@ export function AgentChat({ rcp }: AgentChatProps) {
                      {agent.status === 'awaiting_approval' && idx === agent.messages.length - 1 && (
                        <div className="agent-chat__approval-actions">
                          <button onClick={() => handleApproval(true)} className="agent-chat__approval-btn agent-chat__approval-btn--approve">
-                           ACCEPTDECISION
+                           ACCEPT DECISION
                          </button>
                          <button onClick={() => handleApproval(false)} className="agent-chat__approval-btn agent-chat__approval-btn--reject">
                            REJECT
@@ -205,7 +223,12 @@ export function AgentChat({ rcp }: AgentChatProps) {
             if (content === '--- ACK ---') return null;
 
             return (
-              <div key={idx} className={`agent-chat__message-wrapper ${isUser ? 'user' : 'agent'}`}>
+              <div key={idx} className={`agent-chat__message-wrapper ${isUser ? 'user' : 'agent'} ${showAvatar ? 'with-avatar' : 'no-avatar'}`}>
+                <div className="agent-chat__avatar">
+                  {showAvatar && (
+                    isUser ? <UserAvatar /> : <img src={agentAvatar} alt="Agent" className="agent-chat__avatar-img" />
+                  )}
+                </div>
                 <div className={`agent-chat__message ${isUser ? 'user' : isError ? 'log' : 'agent'}`}>
                   {content}
                 </div>

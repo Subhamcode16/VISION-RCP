@@ -103,6 +103,62 @@ class AntigravityAdapter(AgentAdapter):
         self.retry_count = 0
         self.max_retries = 5
         self._config: Dict[str, Any] = {}
+        self.seen_texts: set[str] = set()
+        self.emitted_hashes: List[str] = [] # Stage 15: Store last 20 message hashes
+        self.last_user_query = "" # Stage 16: For echo scrubbing
+        self.is_bootstrapped = False
+        
+        # Noise filter patterns
+        self.noise_patterns = [
+            re.compile(r"Thought for \d+ s", re.I),
+            re.compile(r"Ask anything", re.I),
+            re.compile(r"Mention @", re.I),
+            re.compile(r"for workflows", re.I),
+            re.compile(r"Using \d+ files", re.I),
+            re.compile(r"Search the web", re.I),
+            re.compile(r"^\.+$"), # Ellipses
+            re.compile(r"^Running", re.I),
+            re.compile(r"Summarizing Latest", re.I),
+            re.compile(r"am now focusing", re.I),
+            re.compile(r"completed that stage", re.I),
+            re.compile(r"primary task is", re.I),
+            re.compile(r"\[ARTIFACT:.*\]", re.I),
+            re.compile(r"Path: file:///.*", re.I),
+            re.compile(r"\[[x /]\] (Implement|Locate|Update|Verify|Final).*", re.I),
+            re.compile(r"Analyzed .*#.*", re.I),
+            re.compile(r"Generating .*", re.I),
+            re.compile(r"Successfully (updated|modified|fixed).*", re.I),
+            re.compile(r"^(Assessing|Evaluating|Analyzing|Planning|Thinking|Considering)", re.I),
+            re.compile(r"context of the recent", re.I),
+            re.compile(r"suggests a fresh", re.I),
+            re.compile(r"strategizing (how to )?fulfill", re.I),
+            re.compile(r"I'm currently focused on", re.I),
+            re.compile(r"leverage my tools", re.I),
+            re.compile(r"figure out how to make", re.I),
+            re.compile(r"Found \d+ folders?", re.I),
+            re.compile(r"located .+ (in )?C:\\", re.I),
+            re.compile(r"request (is )?simple", re.I),
+            re.compile(r"complex code is needed", re.I),
+            re.compile(r"listing contents, nothing more", re.I)
+        ]
+
+        # Bootstrap patterns (Redirect to terminal, not chat)
+        self.bootstrap_patterns = [
+            "Searching for Antigravity window...",
+            "[WATCHDOG]",
+            "[DISCOVERY]",
+            "Success: Connected to",
+            "Scraper bootstrapped with"
+        ]
+
+        # Vibe Buffering State
+        self.emit_buffer: List[str] = []
+        self.last_fragment_time = 0.0
+        self.last_emitted_text: Optional[str] = None
+        self.flush_delay = 1.5 # Increased for structural stability
+        self.last_send_time = 0.0 # Throttling for typing-echo
+        self.is_thinking = False
+        self.thinking_messages = []
 
     async def start(self, config: Dict[str, Any]) -> None:
         """Connect to the running Antigravity application (Non-blocking)."""
@@ -137,7 +193,17 @@ class AntigravityAdapter(AgentAdapter):
             self.window = self.app.window(title_re=self.window_title_re)
             
             window_text = await asyncio.to_thread(self.window.window_text)
-            await self.emit_message(f"Success: Connected to '{window_text}'. Link active.")
+            await self.emit_diagnostic(f"Success: Connected to '{window_text}'. Link active.")
+            
+            # Auto-focus to ensure link is active
+            try:
+                self.window.set_focus()
+                self.window.set_foreground()
+            except:
+                pass
+
+            # Initial snapshot for "Capture from now forward"
+            await self._snapshot_current_text()
             
             self._init_monitoring()
             return True
@@ -154,7 +220,7 @@ class AntigravityAdapter(AgentAdapter):
 
     async def _watchdog_loop(self) -> None:
         """Lightweight watchdog that only escalates to heavy scans when necessary."""
-        await self.emit_message("Searching for Antigravity window...")
+        await self.emit_diagnostic("Searching for Antigravity window...")
         
         while self.is_running:
             try:
@@ -175,7 +241,7 @@ class AntigravityAdapter(AgentAdapter):
                     if found_light:
                         if self.retry_count < self.max_retries:
                             self.retry_count += 1
-                            await self.emit_message(f"[WATCHDOG] Found app! Connecting ({self.retry_count}/{self.max_retries})...")
+                            await self.emit_diagnostic(f"[WATCHDOG] Found app! Connecting ({self.retry_count}/{self.max_retries})...")
                             success = await self._do_connect()
                             if success:
                                 self.retry_count = 0
@@ -187,7 +253,7 @@ class AntigravityAdapter(AgentAdapter):
                         # This keeps the dashboard smooth even if the app isn't open
                         titles = await asyncio.to_thread(_get_active_window_titles)
                         top_apps = [t for t in titles if len(t.strip()) > 0][:12]
-                        await self.emit_message(f"[DISCOVERY] Still waiting for Antigravity. Currently open: {', '.join(top_apps)}")
+                        await self.emit_diagnostic(f"[DISCOVERY] Still waiting for Antigravity. Currently open: {', '.join(top_apps)}")
                         await asyncio.sleep(5)
                         continue
 
@@ -198,29 +264,213 @@ class AntigravityAdapter(AgentAdapter):
                 logger.error(f"Watchdog glitch: {e}")
                 await asyncio.sleep(5)
 
-    def _get_message_count(self) -> int:
-        """Count the number of list items/bubbles in the chat area."""
+    async def _snapshot_current_text(self) -> None:
+        """Capture all current text elements to mark them as 'seen'."""
         if not self.window:
-            return 0
+            return
+        
         try:
-            # We assume messages are stored in a List or similar container
-            # This is a heuristic that will be refined by the ui_scout output
-            return len(self.window.descendants(control_type="ListItem"))
-        except:
-            return 0
+            texts = await asyncio.to_thread(self.window.descendants, control_type="Text")
+            for t in texts:
+                content = t.window_text().strip()
+                if content:
+                    self.seen_texts.add(content)
+            self.is_bootstrapped = True
+            logger.info(f"Scraper bootstrapped with {len(self.seen_texts)} existing text segments.")
+        except Exception as e:
+            logger.error(f"Snapshot failed: {e}")
+
+    def _should_filter(self, text: str) -> bool:
+        """Check if a text segment is UI noise or already seen."""
+        if not text or len(text) < 2:
+            return True
+            
+        if text in self.seen_texts:
+            return True
+            
+        # Hard filter for bootstrap logs (redirected to terminal)
+        for pattern in self.bootstrap_patterns:
+            if pattern in text:
+                logger.info(f"REDIRECT_TO_TERM: {text}")
+                return True
+
+        for pattern in self.noise_patterns:
+            if pattern.search(text):
+                return True
+                
+        return False
+
+    def _join_fragments_semantically(self, buffer: list) -> str:
+        """Joins text fragments while preserving list structures and paragraphs (Stage 10/11)."""
+        if not buffer:
+            return ""
+            
+        processed_lines = []
+        pending_bullet = None # Stage 12: Glue stray bullets to text
+        
+        for frag in buffer:
+            try:
+                lines = str(frag).split("\n")
+                for line in lines:
+                    cleaned = line.strip()
+                    if not cleaned:
+                        continue
+                    
+                    # Bullet Glue Logic: If this fragment IS just a bullet, hold it
+                    markers = ("*", "-", "•", "—", "▸", "▹", "▪", "▫", "·", "»", "✅", "❌", "!", "?")
+                    if cleaned in markers and len(cleaned) == 1:
+                        pending_bullet = cleaned
+                        continue
+                    
+                    if pending_bullet:
+                        cleaned = f"{pending_bullet} {cleaned}"
+                        pending_bullet = None
+                        
+                    processed_lines.append(cleaned)
+            except:
+                continue
+        
+        if not processed_lines:
+            return ""
+
+        blocks = []
+        current_block = []
+        last_item_type = None # "list", "header", or "text"
+
+        for line in processed_lines:
+            # 1. Determine Item Type
+            is_numbered = len(line) > 2 and line[0].isdigit() and (line[1] == "." or line[1] == ")")
+            
+            # Expanded marker check for all common bullet symbols
+            markers_pattern = ("*", "-", "•", "—", "▸", "▹", "▪", "▫", "·", "»", "✅", "❌")
+            is_list = any(line.startswith(m) for m in markers_pattern) or is_numbered or \
+                      (len(line) > 0 and (ord(line[0]) > 0x2000 or ord(line[0]) >= 0x1F300))
+            
+            # Header Strictness: Must have at least 2 words to avoid "today:" or "here:"
+            is_header = not is_list and line.endswith(":") and len(line) < 60 and len(line.split()) > 1
+            current_type = "list" if is_list else ("header" if is_header else "text")
+
+            # Standardize list markers
+            if is_list and not is_numbered and not line.startswith("*"):
+                # Preserve the original fancy marker if it's not a standard bullet
+                if not any(line.startswith(m) for m in ("*", "-", "•")):
+                    pass 
+                else:
+                    line = "* " + line.lstrip("•-— ").strip()
+
+            # 2. Handle Block Transitions
+            if last_item_type is not None and current_type != last_item_type:
+                # Flush the previous block
+                blocks.append("\n".join(current_block))
+                current_block = []
+
+            # 3. Add to Current Block
+            current_block.append(line)
+            last_item_type = current_type
+
+        # Flush final block
+        if current_block:
+            blocks.append("\n".join(current_block))
+
+        # 4. Join blocks with double newlines for visual separation
+        final_text = "\n\n".join(blocks).strip()
+        
+        # Stage 17: Anchor Scrubbing & Response Focusing
+        ANCHOR_PHRASES = [
+            "I have successfully accessed the", 
+            "I have successfully",
+            "Sure, here is the", 
+            "Here is the list", 
+            "The contents of the", 
+            "Based on my analysis", 
+            "I've found the following",
+            "This session focused on"
+        ]
+        
+        # Fuzzy search for an anchor to purge leading noise/planning text
+        lower_text = final_text.lower()
+        earliest_anchor_pos = -1
+        
+        for anchor in ANCHOR_PHRASES:
+            pos = lower_text.find(anchor.lower())
+            if pos != -1:
+                if earliest_anchor_pos == -1 or pos < earliest_anchor_pos:
+                    earliest_anchor_pos = pos
+        
+        if earliest_anchor_pos != -1:
+            # Slice the text from the anchor point onwards
+            # Only scrub if the anchor is in the first half of the message (to avoid accidental internal scrubs)
+            if earliest_anchor_pos < len(final_text) / 2:
+                final_text = final_text[earliest_anchor_pos:].strip()
+
+        # Final Formatting Polish: Ensure verticality for common patterns
+        # If we see multiple dots (file extensions) without newlines, force them.
+        file_exts = (".md", ".txt", ".py", ".ts", ".js", ".json", ".css")
+        for ext in file_exts:
+            if final_text.count(ext) > 1 and f"{ext} " in final_text:
+                final_text = final_text.replace(f"{ext} ", f"{ext}\n")
+        
+        return final_text
+
+    def _get_message_count(self) -> int:
+        """DEPRECATED: Using text diffing instead."""
+        return len(self.seen_texts)
 
     def _get_latest_message_text(self) -> str:
-        """Extract the text from the most recent chat bubble."""
+        """Universal Vacuum: Captures all text elements by alignment, with semantic deduplication."""
         if not self.window:
             return ""
         try:
-            items = self.window.descendants(control_type="ListItem")
-            if not items:
+            # 1. Capture EVERYTHING that has text
+            items = self.window.descendants()
+            text_bearing = []
+            for item in items:
+                try:
+                    txt = item.window_text().strip()
+                    # Filter out tiny artifacts, UI buttons, and "Thought for" noise
+                    if txt and len(txt) > 1:
+                        if any(noise in txt for noise in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating"]):
+                            continue
+                        text_bearing.append(item)
+                except: continue
+
+            if not text_bearing:
                 return ""
-            # Get the last item and its text content
-            last_item = items[-1]
-            return last_item.window_text()
-        except:
+            
+            # 2. Identify the AI Channel (Left Alignment)
+            last_elem = text_bearing[-1]
+            ai_channel_x = last_elem.rectangle().left
+            
+            message_cluster = []
+            # Sweep up all AI-aligned fragments until we hit a User message boundary
+            for item in reversed(text_bearing):
+                rect = item.rectangle()
+                if rect.left > ai_channel_x + 300: # User message boundary
+                    break
+                if abs(rect.left - ai_channel_x) < 200: # AI channel alignment
+                    message_cluster.append(item)
+            
+            # 3. Sort by screen position (Top-to-Bottom)
+            message_cluster.sort(key=lambda x: x.rectangle().top)
+            
+            # 4. Semantic Deduplication (Remove fragments contained within larger fragments)
+            raw_fragments = [p.window_text().strip() for p in message_cluster]
+            final_fragments = []
+            
+            for i, frag in enumerate(raw_fragments):
+                # Only add if this fragment isn't already a part of a larger, surrounding fragment
+                is_subset = False
+                for j, other in enumerate(raw_fragments):
+                    if i != j and frag in other and len(other) > len(frag):
+                        is_subset = True
+                        break
+                
+                if not is_subset and frag not in final_fragments:
+                    final_fragments.append(frag)
+            
+            return "\n".join(final_fragments)
+        except Exception as e:
+            logger.debug(f"Stage 21 Universal Vacuum failed: {e}")
             return ""
 
     async def send_message(self, message: str) -> None:
@@ -250,35 +500,133 @@ class AntigravityAdapter(AgentAdapter):
 
             if not input_box:
                 # Fallback: Just try to type if the window is focused
-                await self.emit_message("Warning: Exact chat input not found. Attempting global keys...")
+                await self.emit_diagnostic("Warning: Exact chat input not found. Attempting global keys...")
                 self.window.set_focus()
                 await asyncio.sleep(0.2)
                 self.window.type_keys(message + "{ENTER}", with_spaces=True)
                 return
-
+            
             # 2. Focus and Type
             input_box.set_focus()
             await asyncio.sleep(0.5) # Allow focus animation
             input_box.type_keys(message + "{ENTER}", with_spaces=True, set_foreground=True)
             
-            await self.emit_message(f"Sent to Sidebar: {message}")
+            # Proactively filter the input to avoid an echo bubble in the dashboard
+            self.seen_texts.add(message)
+            self.last_user_query = message # Stage 16: Save for scrubbing
+            import hashlib
+            msg_hash = hashlib.sha256(message.strip().encode()).hexdigest()
+            self.emitted_hashes.append(msg_hash)
+            if len(self.emitted_hashes) > 20: self.emitted_hashes.pop(0)
+            
+            self.last_emitted_text = message
+            self.last_send_time = time.time() # Start the ignore-echo period
+
+            # Reset thinking state for the new turn
+            self.is_thinking = False
             
         except Exception as e:
             logger.error(f"Failed to send message via UI: {e}")
             await self.emit_message(f"Send Error: {e}")
 
     async def stream_output(self) -> None:
-        """Background loop to detect and capture new messages from the GUI."""
+        """Background loop with intelligent paragraph merging and vibe status."""
+        import random
+        
         while self.is_running:
             try:
-                current_count = self._get_message_count()
+                if not self.window or not self.is_bootstrapped:
+                    await asyncio.sleep(1)
+                    continue
+
+                # Stage 4: Ignore period after sending to prevent typing-echo
+                if time.time() - self.last_send_time < 0.8:
+                    await asyncio.sleep(self.polling_interval)
+                    continue
+
+                # Stage 4: Targeted Scan - Only look inside ListItems (Chat Bubbles)
+                # This drastically reduces noise and prevents capturing the Input Box
+                items = await asyncio.to_thread(self.window.descendants, control_type="ListItem")
                 
-                if current_count > self.last_message_count:
-                    # New message detected
-                    new_text = self._get_latest_message_text()
-                    if new_text:
-                        await self.emit_message(new_text)
-                    self.last_message_count = current_count
+                new_fragments = []
+                for item in items:
+                    try:
+                        # Extract text segments from within this bubble
+                        texts = item.descendants(control_type="Text")
+                        for t in texts:
+                            content = t.window_text().strip()
+                            if not content or len(content) < 2:
+                                continue
+                            
+                            if not self._should_filter(content):
+                                new_fragments.append(content)
+                                self.seen_texts.add(content)
+                    except:
+                        continue
+
+                # Stage 5 Fallback: If no ListItems (bubbles) found, perform a 'Safe Zone' scan
+                # This ensures we don't miss text if the agent uses non-standard containers.
+                if not new_fragments:
+                    try:
+                        window_rect = self.window.rectangle()
+                        window_height = window_rect.height()
+                        safety_threshold = window_rect.top + (window_height * 0.75) # Upper 75% focus
+
+                        all_texts = await asyncio.to_thread(self.window.descendants, control_type="Text")
+                        for t in all_texts:
+                            rect = t.rectangle()
+                            content = t.window_text().strip()
+                            
+                            # Skip if in the 'Input Safety Zone' (bottom 25% of window)
+                            if rect.top > safety_threshold:
+                                continue
+                            
+                            if content and len(content) > 1 and not self._should_filter(content):
+                                new_fragments.append(content)
+                                self.seen_texts.add(content)
+                    except:
+                        pass
+
+                # Supplemental Thinking Check (still useful for status)
+                # We do a targeted check for '...' text that might be global
+                all_texts = await asyncio.to_thread(self.window.descendants, control_type="Text")
+                found_thinking_indicator = any(t.window_text().strip() == "..." for t in all_texts[:50])
+
+                # 3. Handle Fragment Buffering
+                if new_fragments:
+                    self.emit_buffer.extend(new_fragments)
+                    self.last_fragment_time = time.time()
+                    self.is_thinking = False # Content arrived!
+
+                # 4. Flush Buffer when silence detected
+                if self.emit_buffer and (time.time() - self.last_fragment_time > self.flush_delay):
+                    # Snapshot and Clear to prevent race conditions
+                    snapshot = list(self.emit_buffer)
+                    self.emit_buffer = []
+                    
+                    try:
+                        full_text = self._join_fragments_semantically(snapshot)
+                        
+                        if full_text:
+                            # Diagnostic: Mirror to stdout so user can see it if dashboard glitches
+                            logger.info(f"BRIDGE_FINAL_RESPONSE: {full_text[:100]}...")
+                            await self.emit_diagnostic(f"[BRIDGE] Flushed response ({len(snapshot)} frags).")
+                            
+                            # Hash-based deduplication guard (Stage 15)
+                            import hashlib
+                            clean_text = full_text.strip()
+                            text_hash = hashlib.sha256(clean_text.encode()).hexdigest()
+                            
+                            is_duplicate = text_hash in self.emitted_hashes
+                            
+                            if full_text and not is_duplicate and full_text != self.last_emitted_text:
+                                await self.emit_message(full_text)
+                                self.last_emitted_text = full_text
+                                self.emitted_hashes.append(text_hash)
+                                if len(self.emitted_hashes) > 20: self.emitted_hashes.pop(0)
+                    except Exception as e:
+                        await self.emit_diagnostic(f"[BRIDGE] Join error: {e}")
+                        logger.error(f"Semantic join failed: {e}")
                 
                 await asyncio.sleep(self.polling_interval)
             except asyncio.CancelledError:

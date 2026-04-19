@@ -54,6 +54,17 @@ class AgentAdapter(abc.ABC):
         )
         await self.emit_callback(entry)
 
+    async def emit_diagnostic(self, content: str) -> None:
+        """Helper to emit an internal log entry (visible in Terminal, not Chat)."""
+        entry = LogEntry(
+            pid=0,  # PID 0 designates system/adapter diagnostics
+            name=self.name,
+            stream="stdout",
+            data=f"[ADAPTER] {content}",
+            ts=time.time()
+        )
+        await self.emit_callback(entry)
+
     async def emit_approval_request(self, content: str) -> None:
         """Helper to emit an APPROVAL_REQUEST log entry."""
         entry = LogEntry(

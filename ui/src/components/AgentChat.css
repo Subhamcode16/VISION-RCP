@@ -80,10 +80,10 @@
 .agent-chat__messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 2px; /* Small gap for grouped messages */
   scroll-behavior: smooth;
 }
 
@@ -91,36 +91,82 @@
 .agent-chat__message-wrapper {
   display: flex;
   width: 100%;
+  gap: 12px;
+  align-items: flex-end;
 }
 
-.agent-chat__message-wrapper.user { justify-content: flex-end; }
-.agent-chat__message-wrapper.agent { justify-content: flex-start; }
+.agent-chat__message-wrapper.user { 
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
 
+.agent-chat__message-wrapper.agent { 
+  justify-content: flex-start;
+}
+
+.agent-chat__message-wrapper.with-avatar {
+  margin-top: 16px;
+}
+
+/* ─── Avatar ─────────────────────────────────── */
+.agent-chat__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--zinc-900);
+  border: 1px solid var(--zinc-800);
+  flex-shrink: 0;
+  color: var(--zinc-400);
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.agent-chat__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agent-chat.no-avatar .agent-chat__avatar {
+  opacity: 0;
+}
+
+/* ─── Message Bubble ─────────────────────────── */
 .agent-chat__message {
-  max-width: 85%;
-  padding: 12px 16px;
-  border-radius: 14px;
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 18px;
   font-size: 14px;
   line-height: 1.5;
   position: relative;
-  word-break: break-all;
-  white-space: pre-wrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  word-break: break-word;
+  white-space: pre-wrap !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .agent-chat__message.user {
-  background: var(--zinc-800);
-  color: var(--zinc-100);
-  border: 1px solid var(--zinc-700);
+  background: #2b5278; /* Telegram-ish blue */
+  color: #fff;
+  border: none;
+}
+
+.agent-chat__message-wrapper.user.with-avatar .agent-chat__message {
   border-bottom-right-radius: 4px;
 }
 
 .agent-chat__message.agent {
-  background: rgba(24, 24, 27, 0.4);
-  color: var(--zinc-300);
+  background: var(--zinc-900);
+  color: var(--zinc-200);
   border: 1px solid var(--zinc-800);
-  border-bottom-left-radius: 4px;
   font-family: 'Inter', sans-serif;
+}
+
+.agent-chat__message-wrapper.agent.with-avatar .agent-chat__message {
+  border-bottom-left-radius: 4px;
 }
 
 /* Log lines look different */

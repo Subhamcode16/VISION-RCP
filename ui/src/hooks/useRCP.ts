@@ -100,9 +100,21 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
       if (envelope.type === 'error') {
         // Handle token expiry by attempting a refresh and retry
         if (envelope.error?.code === 'AUTH_INVALID' && auth.refreshToken) {
-          // If we hit an unexpected auth error, logout to avoid loops
-          logout();
-          pending.reject(new Error('Session expired'));
+          // If we hit an auth error, try to refresh instead of instant logout
+          console.warn('Auth invalid, attempting silent refresh...');
+          refreshTokens()
+            .then(() => {
+              // Retry the original command with the new token
+              const original = pending.command;
+              const payload = pending.payload;
+              send(original, payload)
+                .then(pending.resolve)
+                .catch(pending.reject);
+            })
+            .catch(() => {
+              logout();
+              pending.reject(new Error('Session expired'));
+            });
           return;
         }
         pending.reject(new Error(envelope.error?.message ?? 'Unknown error'));
