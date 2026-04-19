@@ -1,4 +1,29 @@
 # Journal of Stabilization: Vision-RCP x Antigravity
+**Session End: April 20, 2026**
+
+## 1. Summary of Work
+This session transformed Vision-RCP from a local-only tool into a **Cloud-Accessible Control Plane**. We moved from basic window discovery to a secure, remote orchestration framework capable of direct mobile-to-daemon handshaking.
+
+## 2. Major Breakthroughs
+- **QR Handshake Gateway**: Integrated `qrcode[pil]` to generate an ASCII QR code in the terminal startup. This allows users to scan and instantly pair their mobile devices with their local daemon without manual configuration.
+- **"Universal Vacuum" Scraper**: Shifted from fragile element-based targeting to a layout-aware scraping pipeline. By capturing all AI-aligned text fragments and joining them semantically, we significantly increased response capture reliability.
+- **Deep-Link Authentication**: Implemented URL-based session initialization (`?k=SECRET`), enabling one-click remote session start from mobile browsers.
+
+## 3. Technical Post-Mortem (Failures & Corrections)
+- **GitHub CLI Dependency**: Learned that standardizing on `gh` was a mistake as it is not universal. Corrected this by pivoting back to **Standard HTTPS Git** for automated pushes, ensuring compatibility across user environments.
+- **The "Typing Echo" Problem**: Discovered that rapid scraping captures the user's just-sent message as an AI "echo." Corrected this with a **last_send_time ignore-window** (800ms) in the `AntigravityAdapter`.
+- **Secret Isolation**: Identified hardcoded developer tokens as a deployment blocker. Migrated all security markers to environment variables (`.env`) with a robust `.env.example` boilerplate.
+
+## 4. Key Learnings
+- **Screen Alignment as Truth**: In dynamic GUIs (like Antigravity/VS-Code), screen-alignment (X-coordinate) is a more stable anchor for identifying "Speakers" than container-type or class-name.
+- **Outbound-Only Tunneling**: The successful use of a Cloud Relay confirmed that we can maintain a Zero-Trust architecture by never requiring inbound port forwarding.
+
+## 5. Resumption Instructions (Next Session)
+When we resume, we should:
+1. **Live E2E Test**: Deploy the Dashboard to Vercel and tunnel the local Relay through Cloudflare to verify full remote mobile control.
+2. **Expansion**: Test the "Universal Vacuum" scraper on different screen resolutions to verify alignment-threshold robustness.
+
+---
 **Session End: April 19, 2026**
 
 ## 1. Summary of Work
