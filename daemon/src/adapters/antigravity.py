@@ -656,22 +656,29 @@ class AntigravityAdapter(AgentAdapter):
                                 if clean_text.startswith(self.last_emitted_text):
                                     is_subset = True
                                     logger.debug(f"Subset detected: ignoring partial overlap.")
-                                    # If the 'subset' is significantly larger (20%), treat as new growth
-                                    if len(clean_text) > len(self.last_emitted_text) * 1.2:
+                                    # If the 'subset' is significantly larger (10%) or previous was very short, treat as new growth
+                                    if len(clean_text) > len(self.last_emitted_text) * 1.1 or len(self.last_emitted_text) < 15:
                                         is_subset = False
 
                             if full_text and not is_duplicate and not is_subset and full_text != self.last_emitted_text:
                                 # Final non-destructive scrub for internal monologue
-                                meta_markers = ["Acknowledging", "Processing", "Observing", "Thinking", "I'm processing"]
+                                meta_markers = ["Processing", "Thinking", "I'm processing"] 
                                 lines = full_text.split("\n")
                                 final_lines = []
                                 for line in lines:
                                     trimmed = line.strip()
-                                    # If line starts with a thought but contains more content, strip just the thought
+                                    if not trimmed: continue
+
+                                    # 1. Always keep greetings or plan headers
+                                    if trimmed.lower().startswith(("hello", "hi ", "hey ", "how can i help")):
+                                        final_lines.append(line)
+                                        continue
+
+                                    # 2. Check for meta markers
                                     found_meta = False
                                     for m in meta_markers:
                                         if trimmed.lower().startswith(m.lower()):
-                                            # If there's a period or colon, keep everything after it
+                                            # If line starts with a thought but contains more content, strip just the thought
                                             for separator in [". ", ": ", "! "]:
                                                 if separator in trimmed:
                                                     final_lines.append(trimmed.split(separator, 1)[1].strip())
@@ -681,6 +688,8 @@ class AntigravityAdapter(AgentAdapter):
                                             # If it's just the header line, skip it entirely
                                             found_meta = True
                                             break
+                                    
+                                    # 3. If no meta found, it's actual content
                                     if not found_meta:
                                         final_lines.append(line)
                                 
