@@ -12,7 +12,7 @@ RELAY_PORT = 8080
 VERBOSE = True
 
 def log(msg: str):
-    print(f" [REMOTE-BOOT] {msg}")
+    print(f" [REMOTE-BOOT] {msg}", flush=True)
 
 async def run_relay():
     """Starts the relay server process."""
@@ -33,50 +33,46 @@ async def run_relay():
     return proc
 
 async def run_tunnel(port: int):
-    """Starts cloudflared tunnel and extracts the URL."""
-    log(f"Starting Cloudflare Quick Tunnel for port {port}...")
-    log("Executing cloudflared (this may take a moment)...")
+    """Starts cloudflared tunnel and extracts the URL via file-pipe."""
+    log(f"Starting Cloudflare Tunnel for port {port}...")
+    log("Using File-Pipe strategy for maximum reliability.")
     
-    # Switch to shell=True (via create_subprocess_shell) for better Windows compatibility
-    cmd = f"cloudflared tunnel --url http://localhost:{port}"
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
+    log_file = Path("tunnel_boot.log")
+    if log_file.exists(): log_file.unlink()
+
+    # Launch cloudflared and redirect ALL output to a file
+    # We use 'start /b' to run in background in the same window context
+    cmd = f"cloudflared tunnel --url http://localhost:{port} > {log_file} 2>&1"
+    
+    # We use Popen here because we want it to run detached from the pipe
+    proc = subprocess.Popen(["cmd", "/c", cmd], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0)
     
     tunnel_url = None
-    log("Polling Cloudflare for public URL...")
+    start_time = time.time()
     
     try:
-        start_time = time.time()
-        for _ in range(200):
-            if _ % 4 == 0: print(".", end="", flush=True)
-
-            try:
-                # Use a very short timeout to keep the loop responsive
-                line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.15)
-                if not line_bytes: break
-                
-                line = line_bytes.decode(errors='replace').strip()
-                # Print everything if we've been waiting more than 5 seconds
-                if time.time() - start_time > 5:
-                    print(f"\n  [cloudflared] {line}")
-                
-                if ".trycloudflare.com" in line:
-                    match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", line)
+        log("Polling log file for public URL...")
+        while time.time() - start_time < 30:
+            print(".", end="", flush=True)
+            await asyncio.sleep(1.0)
+            
+            if log_file.exists():
+                content = log_file.read_text(errors='replace')
+                if ".trycloudflare.com" in content:
+                    match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", content)
                     if match:
                         tunnel_url = match.group(1)
-                        print(f"\n [SUCCESS] Tunnel URL detected: {tunnel_url}")
+                        print(f"\n [SUCCESS] Tunnel URL: {tunnel_url}")
                         return proc, tunnel_url
-            except asyncio.TimeoutError:
-                continue
             
-            if time.time() - start_time > 30:
-                print("\n [TIMEOUT] Cloudflare tunnel taking too long.")
+            # Check if process died
+            if proc.poll() is not None:
+                log("Cloudflare process terminted unexpectedly.")
                 break
+        
+        log("TIMEOUT or FAILURE: Could not find tunnel URL in log.")
     except Exception as e:
-        log(f"Tunnel monitor error: {e}")
+        log(f"Tunnel error: {e}")
     
     return proc, None
 
