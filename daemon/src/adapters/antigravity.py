@@ -661,10 +661,29 @@ class AntigravityAdapter(AgentAdapter):
                                         is_subset = False
 
                             if full_text and not is_duplicate and not is_subset and full_text != self.last_emitted_text:
-                                # Final scrub for any leaking 'thought' headers
-                                meta = ["Acknowledging", "Processing", "Observing", "Thinking", "I'm processing"]
+                                # Final non-destructive scrub for internal monologue
+                                meta_markers = ["Acknowledging", "Processing", "Observing", "Thinking", "I'm processing"]
                                 lines = full_text.split("\n")
-                                final_lines = [l for l in lines if not any(l.strip().startswith(m) for m in meta)]
+                                final_lines = []
+                                for line in lines:
+                                    trimmed = line.strip()
+                                    # If line starts with a thought but contains more content, strip just the thought
+                                    found_meta = False
+                                    for m in meta_markers:
+                                        if trimmed.lower().startswith(m.lower()):
+                                            # If there's a period or colon, keep everything after it
+                                            for separator in [". ", ": ", "! "]:
+                                                if separator in trimmed:
+                                                    final_lines.append(trimmed.split(separator, 1)[1].strip())
+                                                    found_meta = True
+                                                    break
+                                            if found_meta: break
+                                            # If it's just the header line, skip it entirely
+                                            found_meta = True
+                                            break
+                                    if not found_meta:
+                                        final_lines.append(line)
+                                
                                 content = "\n".join(final_lines).strip()
                                 
                                 if content:

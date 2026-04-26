@@ -95,12 +95,19 @@ async def main():
         await asyncio.sleep(2) # Give relay a moment to bind
         
         # 2. Start Tunnel
+        if not os.path.exists(os.path.expanduser("~") + "/bin/cloudflared.exe") and \
+           not subprocess.run(["where", "cloudflared"], capture_output=True, shell=True).returncode == 0:
+            log("CRITICAL: 'cloudflared' not found. Please install it to enable mobile access.")
+            return
+
+        log("Establishing Cloudflare Tunnel (be patient)...")
         tunnel_proc, public_url = await run_tunnel(RELAY_PORT)
         if not public_url:
-            log("FAILED: Could not establish tunnel. Check if cloudflared is installed.")
+            log("FAILED: Could not establish tunnel.")
             return
 
         # 3. Start Daemon
+        log("Booting Vision-RCP Daemon...")
         daemon_proc = await run_daemon(public_url)
         
         # 4. Wait for daemon to finish or for interrupt
