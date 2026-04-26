@@ -140,6 +140,10 @@ class AntigravityAdapter(AgentAdapter):
             re.compile(r"request (is )?simple", re.I),
             re.compile(r"complex code is needed", re.I),
             re.compile(r"listing contents, nothing more", re.I),
+            re.compile(r"Generating Deduplication", re.I),
+            re.compile(r"Mobile Resilience", re.I),
+            re.compile(r"Short-Circuit Link", re.I),
+            re.compile(r"^(Generating|Analyzing|Starting|Connecting|Stopping|Retrying|Searching|Found|Success|Completed).{1,5}$", re.I),
             # Stage 22: Enhanced Meta-Commentary Purge
             re.compile(r"Acknowledge and Contextualize", re.I),
             re.compile(r"see the user's greeting", re.I),
