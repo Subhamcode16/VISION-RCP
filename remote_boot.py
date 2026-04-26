@@ -35,8 +35,12 @@ async def run_relay():
 async def run_tunnel(port: int):
     """Starts cloudflared tunnel and extracts the URL."""
     log(f"Starting Cloudflare Quick Tunnel for port {port}...")
-    proc = await asyncio.create_subprocess_exec(
-        "cloudflared", "tunnel", "--url", f"http://localhost:{port}",
+    log("Executing cloudflared (this may take a moment)...")
+    
+    # Switch to shell=True (via create_subprocess_shell) for better Windows compatibility
+    cmd = f"cloudflared tunnel --url http://localhost:{port}"
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
