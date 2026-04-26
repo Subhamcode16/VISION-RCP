@@ -59,7 +59,7 @@ async def run_tunnel(port: int):
             if log_file.exists():
                 content = log_file.read_text(errors='replace')
                 if ".trycloudflare.com" in content:
-                    match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", content)
+                    match = re.search(r"(https://[a-zA-Z0-9.-]+\.trycloudflare\.com)", content)
                     if match:
                         tunnel_url = match.group(1)
                         print(f"\n [SUCCESS] Tunnel URL: {tunnel_url}")
