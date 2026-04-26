@@ -26,8 +26,8 @@ async def run_relay():
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "uvicorn", "server:app", "--port", str(RELAY_PORT), "--host", "0.0.0.0",
         cwd=str(Path("relay")),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stdout=None, # Direct to terminal to avoid buffer hang
+        stderr=None
     )
     return proc
 
@@ -69,6 +69,7 @@ async def run_daemon(relay_public_url: str):
     log("Starting Daemon with remote relay link...")
     env = os.environ.copy()
     env["RELAY_PUBLIC_URL"] = relay_public_url
+    env["RELAY_URL"] = f"ws://127.0.0.1:{RELAY_PORT}"
     env["VITE_DASHBOARD_URL"] = "https://vision-rcp-ui.vercel.app/"
     
     # Run as a module from the daemon directory to fix relative imports

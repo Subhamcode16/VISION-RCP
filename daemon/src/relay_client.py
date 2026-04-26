@@ -78,15 +78,15 @@ class RelayClient:
                f"&fingerprint={self._device.fingerprint}"
                f"&name={self._device.device_name}")
                
-        # ping_interval=10, ping_timeout=20 to keep tunnels (bore/ngrok) alive
-        async with websockets.connect(url, ping_interval=10, ping_timeout=20) as ws:
+        # ping_interval=10, ping_timeout=30 to accommodate tunnel jitter
+        async with websockets.connect(url, ping_interval=10, ping_timeout=30) as ws:
             self._ws = ws
             logger.info("Connected to relay server")
             
             # 1. Wait for handshake response (session assignment)
             try:
-                # 5s timeout on handshake response to prevent hanging indefinitely
-                msg_raw = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                # 15s timeout on handshake response to prevent hanging indefinitely
+                msg_raw = await asyncio.wait_for(ws.recv(), timeout=15.0)
                 handshake = json.loads(msg_raw)
                 if handshake.get("type") == "handshake":
                     self._session_id = handshake["session_id"]

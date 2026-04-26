@@ -79,6 +79,16 @@ class Config:
                     file_data = tomllib.load(f)
                 self._data = _deep_merge(self._data, file_data)
 
+        # Environment Overrides
+        if os.environ.get("RELAY_URL"):
+            self._data["relay"]["url"] = os.environ.get("RELAY_URL")
+        if os.environ.get("RELAY_TOKEN"):
+            self._data["relay"]["token"] = os.environ.get("RELAY_TOKEN")
+        if os.environ.get("RELAY_PORT"):
+            # If a local port is explicitly provided, reconstruct the local URL
+            port = os.environ.get("RELAY_PORT")
+            self._data["relay"]["url"] = f"ws://127.0.0.1:{port}"
+
         # Expand data_dir
         data_dir = self._data["daemon"]["data_dir"]
         self._data["daemon"]["data_dir"] = str(Path(data_dir).expanduser().resolve())
