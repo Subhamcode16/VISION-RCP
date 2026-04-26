@@ -23,6 +23,7 @@
 **/*.log
 **/*.db
 **/*.port
+**/*.md
 status.json
 bridge_status.json
 
