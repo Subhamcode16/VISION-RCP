@@ -24,6 +24,7 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
     payload: Record<string, unknown>;
   }>>(new Map());
   const pingTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const lastPongAt = useRef<number>(Date.now());
   const isRefreshing = useRef(false);
 
   const {
@@ -161,8 +162,8 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
       }
     }
 
-    // Ping response → calculate latency
     if (envelope.type === 'response' && envelope.payload?.pong) {
+      lastPongAt.current = Date.now();
       const serverTs = envelope.payload.ts as number;
       const latency = Math.round(Date.now() - serverTs * 1000);
       setLatency(Math.abs(latency));
@@ -203,9 +204,17 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
       setConnectionStatus('connected');
       reconnectAttempt.current = 0;
 
-      // Start ping interval
+      // Start ping interval + Liveness Watchdog
+      lastPongAt.current = Date.now();
       pingTimer.current = setInterval(() => {
+        // 1. Send Ping
         send('system.ping').catch(() => {});
+
+        // 2. Watchdog: If no pong for > 30s, the socket is likely frozen (common on mobile)
+        if (Date.now() - lastPongAt.current > 30_000) {
+          console.warn('[RCP] Liveness watchdog triggered. Force reconnecting...');
+          wsRef.current?.close(); // This will trigger onclose -> scheduleReconnect
+        }
       }, 10_000);
 
       // Initial state sync (exempt from auth)
@@ -331,10 +340,34 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
   // Connect on mount
   useEffect(() => {
     connect();
+
+    // MOBILE RECON RESILIENCE:
+    // 1. Reconnect immediately when tab becomes visible (Chrome resumed from background)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          console.log('[RCP] Tab visible - triggering immediate reconnect.');
+          connect();
+        }
+      }
+    };
+
+    // 2. Reconnect when hardware network returns
+    const handleOnline = () => {
+      console.log('[RCP] Network online - triggering reconnect.');
+      connect();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       cleanup();
       wsRef.current?.close();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
     };
   }, [connect]);
 

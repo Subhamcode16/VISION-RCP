@@ -33,6 +33,7 @@ Current AI agents (like Antigravity or VS-Code Copilot) are powerful but "sessio
 *   **🦾 Sentinel Agent (Autonomous Watchdog)**: A background orchestration layer that handles "Run Command" permissions. It auto-approves safe operations while enforcing hard guardrails for destructive commands, allowing for semi-autonomous remote tasking.
 *   **💎 Triple-Guard Stabilization**: A definitive solution to message duplication. By combining **Subset Filtering**, **Identity Checks**, and **UID-based Rejection**, we deliver a crystal-clear, single-response experience even on high-latency mobile networks.
 *   **🔗 Shadow-Link Tunneling**: Access your local dashboard from anywhere in the world without opening ports. Our outbound-only WSS relay provides a secure, encrypted bridge to your machine.
+*   **📱 Mobile Resilience Engine**: Specialized reconnection logic that automatically restores your session when the browser is resumed from the background. Includes a "Liveness Watchdog" to detect and fix frozen mobile connections.
 *   **🔍 Flow Audit**: A real-time traffic sniffer for inspecting raw RCP packets, providing deep transparency into your agent's communication pipeline.
 
 ---
