@@ -4,6 +4,7 @@ import sys
 import re
 import signal
 import subprocess
+import time
 from pathlib import Path
 
 # Configuration
@@ -41,33 +42,37 @@ async def run_tunnel(port: int):
     )
     
     tunnel_url = None
-    # We read stderr where cloudflared logs the URL
+    log("Polling Cloudflare for public URL...")
+    
     try:
-        # Give it up to 30 seconds
-        for _ in range(120):
-            # Progress feedback for the user
-            if _ % 4 == 0:
-                print(".", end="", flush=True)
+        start_time = time.time()
+        for _ in range(200):
+            if _ % 4 == 0: print(".", end="", flush=True)
 
             try:
-                line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.25)
+                # Use a very short timeout to keep the loop responsive
+                line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.15)
                 if not line_bytes: break
+                
                 line = line_bytes.decode(errors='replace').strip()
-                # Still print cloudflared logs if they contain something interesting
-                if "error" in line.lower() or "failed" in line.lower():
-                    print(f"\n  [cloudflared-err] {line}")
+                # Print everything if we've been waiting more than 5 seconds
+                if time.time() - start_time > 5:
+                    print(f"\n  [cloudflared] {line}")
                 
                 if ".trycloudflare.com" in line:
                     match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", line)
                     if match:
                         tunnel_url = match.group(1)
-                        print("\n") # End progress line
-                        log(f"Tunnel established: {tunnel_url}")
+                        print(f"\n [SUCCESS] Tunnel URL detected: {tunnel_url}")
                         return proc, tunnel_url
             except asyncio.TimeoutError:
                 continue
+            
+            if time.time() - start_time > 30:
+                print("\n [TIMEOUT] Cloudflare tunnel taking too long.")
+                break
     except Exception as e:
-        log(f"Tunnel error: {e}")
+        log(f"Tunnel monitor error: {e}")
     
     return proc, None
 
