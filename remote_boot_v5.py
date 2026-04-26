@@ -12,7 +12,8 @@ RELAY_PORT = 8080
 VERBOSE = True
 
 def log(msg: str):
-    print(f" [REMOTE-BOOT] {msg}", flush=True)
+    sys.stdout.write(f" [REMOTE-BOOT] {msg}\n")
+    sys.stdout.flush()
 
 async def run_relay():
     """Starts the relay server process."""
@@ -40,15 +41,13 @@ async def run_tunnel(port: int):
     log_file = Path("tunnel_boot.log")
     if log_file.exists(): log_file.unlink()
 
-    # Launch cloudflared and redirect ALL output to a file handle
-    # This is more reliable than shell redirection on Windows
-    log_fh = open(log_file, "wb")
+    # Launch cloudflared and use NATIVE logfile support
+    # This is the most reliable way to ensure output is flushed to disk
+    cmd = ["cloudflared", "tunnel", "--url", f"http://localhost:{port}", "--logfile", str(log_file)]
     
-    # We use Popen here because we want it to run detached from the pipe
+    # We use Popen here because we want it to run detached
     proc = subprocess.Popen(
-        ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"],
-        stdout=log_fh,
-        stderr=log_fh,
+        cmd,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
     )
     
@@ -109,6 +108,7 @@ async def main():
     try:
         # 1. Start Tunnel FIRST (provides the public URL needed by daemon)
         log("Establishing Cloudflare Tunnel (be patient)...")
+        log("Note: This can take 5-15 seconds on some networks.")
         tunnel_proc, public_url = await run_tunnel(RELAY_PORT)
         if not public_url:
             log("FAILED: Could not establish tunnel.")
