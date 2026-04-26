@@ -57,21 +57,24 @@ async def run_tunnel(port: int):
     try:
         log("Polling log file for public URL...")
         while time.time() - start_time < 30:
-            print(".", end="", flush=True)
+            sys.stdout.write(".")
+            sys.stdout.flush()
             await asyncio.sleep(1.0)
             
             if log_file.exists():
                 content = log_file.read_text(errors='replace')
                 if ".trycloudflare.com" in content:
-                    match = re.search(r"(https://[a-zA-Z0-9.-]+\.trycloudflare\.com)", content)
+                    # Broad search for the full URL
+                    match = re.search(r"https?://[a-zA-Z0-9.-]+\.trycloudflare\.com", content)
                     if match:
-                        tunnel_url = match.group(1)
-                        print(f"\n [SUCCESS] Tunnel URL: {tunnel_url}")
+                        tunnel_url = match.group(0)
+                        sys.stdout.write("\n")
+                        log(f"SUCCESS: Tunnel Identified -> {tunnel_url}")
                         return proc, tunnel_url
             
             # Check if process died
             if proc.poll() is not None:
-                log("Cloudflare process terminted unexpectedly.")
+                log("Cloudflare process terminated unexpectedly.")
                 break
         
         log("TIMEOUT or FAILURE: Could not find tunnel URL in log.")

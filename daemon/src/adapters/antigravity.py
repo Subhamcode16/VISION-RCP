@@ -457,24 +457,29 @@ class AntigravityAdapter(AgentAdapter):
         if not self.window:
             return ""
         try:
+            # Stage 23: Diagnostic Sweep (Every 5 seconds)
+            # This logs raw coordinates to help the user identify the AI side
+            debug_pulse = (int(time.time()) % 10 < 2) # Pulse for 2 seconds every 10
+            
             # 1. Capture EVERYTHING that has text (Targeted Scans for Speed)
             text_bearing = []
-            # Focusing on ListItem and Text covers 99% of chat-like content efficiently
-            for it in self.window.descendants(control_type="ListItem"):
-                try:
-                    txt = it.window_text().strip()
-                    if txt and len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
-                        text_bearing.append(it)
+            candidates = []
+            for c_type in ["ListItem", "Text", "Static"]:
+                try: candidates.extend(self.window.descendants(control_type=c_type))
                 except: continue
-            
-            # Fallback to Text if ListItem sweep was empty
-            if not text_bearing:
-                for it in self.window.descendants(control_type="Text"):
-                    try:
-                        txt = it.window_text().strip()
-                        if txt and len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
+                
+            for it in candidates:
+                try:
+                    rect = it.rectangle()
+                    txt = it.window_text().strip()
+                    if txt:
+                        if debug_pulse:
+                            logger.info(f" [SCRAPER-DEBUG] L:{rect.left} T:{rect.top} | '{txt[:30]}...'")
+                        
+                        # Filter noise
+                        if len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
                             text_bearing.append(it)
-                    except: continue
+                except: continue
 
             if not text_bearing:
                 return ""
@@ -776,8 +781,9 @@ class AntigravityAdapter(AgentAdapter):
                 return
 
             # 4. Auto-Approve (Safe)
-            # Only log auto-approvals to terminal/diagnostic, not the main chat
+            # Log to diagnostic and send a small "Sentinel Status" message
             await self.emit_diagnostic(f"✅ [SENTINEL] Auto-approving safe command: '{pending_command[:50]}...'")
+            await self.emit_message(f"🛡️ **Sentinel:** Auto-approved `{pending_command[:40]}...`")
             allow_btn = self.window.child_window(title="Allow", control_type="Button")
             
             if await asyncio.to_thread(allow_btn.exists, timeout=0.5):
