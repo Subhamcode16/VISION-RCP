@@ -24,6 +24,7 @@
 **/*.db
 **/*.port
 **/*.md
+!README.md
 status.json
 bridge_status.json
 
