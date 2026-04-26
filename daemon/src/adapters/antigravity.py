@@ -457,18 +457,24 @@ class AntigravityAdapter(AgentAdapter):
         if not self.window:
             return ""
         try:
-            # 1. Capture EVERYTHING that has text
-            items = self.window.descendants()
+            # 1. Capture EVERYTHING that has text (Targeted Scans for Speed)
             text_bearing = []
-            for item in items:
+            # Focusing on ListItem and Text covers 99% of chat-like content efficiently
+            for it in self.window.descendants(control_type="ListItem"):
                 try:
-                    txt = item.window_text().strip()
-                    # Filter out tiny artifacts, UI buttons, and "Thought for" noise
-                    if txt and len(txt) > 1:
-                        if any(noise in txt for noise in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
-                            continue
-                        text_bearing.append(item)
+                    txt = it.window_text().strip()
+                    if txt and len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
+                        text_bearing.append(it)
                 except: continue
+            
+            # Fallback to Text if ListItem sweep was empty
+            if not text_bearing:
+                for it in self.window.descendants(control_type="Text"):
+                    try:
+                        txt = it.window_text().strip()
+                        if txt and len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
+                            text_bearing.append(it)
+                    except: continue
 
             if not text_bearing:
                 return ""
