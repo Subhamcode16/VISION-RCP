@@ -473,18 +473,20 @@ class AntigravityAdapter(AgentAdapter):
             if not text_bearing:
                 return ""
             
-            # 2. Identify the AI Channel (Left Alignment)
-            last_elem = text_bearing[-1]
-            ai_channel_x = last_elem.rectangle().left
-            
+            # 2. Identify and Cluster AI Fragments (Absolute Alignment)
+            # AI messages are ALWAYS on the left (usually < 450px)
+            # User messages are ALWAYS on the right (usually > 500px)
             message_cluster = []
-            # Sweep up all AI-aligned fragments until we hit a User message boundary
-            for item in reversed(text_bearing):
+            
+            for item in text_bearing:
                 rect = item.rectangle()
-                if rect.left > ai_channel_x + 300: # User message boundary
-                    break
-                if abs(rect.left - ai_channel_x) < 200: # AI channel alignment
+                # 100px to 450px is the "AI Zone" (handles most resolutions)
+                if 50 < rect.left < 450:
                     message_cluster.append(item)
+            
+            if not message_cluster:
+                # Fallback: Capture everything if the UI is very compact
+                message_cluster = [it for it in text_bearing if it.rectangle().left < 400]
             
             # 3. Sort by screen position (Top-to-Bottom)
             message_cluster.sort(key=lambda x: x.rectangle().top)
@@ -583,6 +585,11 @@ class AntigravityAdapter(AgentAdapter):
                 # Stage 21 Universal Vacuum: Captures text by alignment (More robust than ListItem)
                 # This ensures we get both thinking segments AND the final response even if they are in different containers.
                 vacuumed_text = await asyncio.to_thread(self._get_latest_message_text)
+                
+                # Periodic Diagnostic Pulse (Every 10 polls)
+                if self.monitor_cycle % 10 == 0 and vacuumed_text:
+                    await self.emit_diagnostic(f"[SCRAPER] Memory Check: {len(vacuumed_text)} chars in buffer. Peek: '{vacuumed_text[:50]}...'")
+                
                 new_fragments = []
                 
                 if vacuumed_text:
@@ -609,8 +616,11 @@ class AntigravityAdapter(AgentAdapter):
                             content = t.window_text().strip()
                             
                             # Skip if in the 'Input Safety Zone' (bottom 25% of window)
-                            if rect.top > safety_threshold:
-                                continue
+                            # Alignment logic: AI text is usually left-aligned but with a margin.
+                            # We accept everything above 100px to handle small resolutions.
+                            if rect.left > 100:
+                                if rect.top > safety_threshold:
+                                    continue
                             
                             if content and len(content) > 1 and not self._should_filter(content):
                                 new_fragments.append(content)
