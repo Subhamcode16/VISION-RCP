@@ -465,7 +465,7 @@ class AntigravityAdapter(AgentAdapter):
                     txt = item.window_text().strip()
                     # Filter out tiny artifacts, UI buttons, and "Thought for" noise
                     if txt and len(txt) > 1:
-                        if any(noise in txt for noise in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating"]):
+                        if any(noise in txt for noise in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
                             continue
                         text_bearing.append(item)
                 except: continue
