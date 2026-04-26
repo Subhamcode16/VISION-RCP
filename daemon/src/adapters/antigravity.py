@@ -312,7 +312,8 @@ class AntigravityAdapter(AgentAdapter):
         if not text or len(text) < 2:
             return True
             
-        if text in self.seen_texts:
+        # Only filter exact matches if they are tool-like noise or extremely short
+        if text in self.seen_texts and len(text) < 50:
             return True
             
         # Hard filter for bootstrap logs (redirected to terminal)
@@ -656,8 +657,8 @@ class AntigravityAdapter(AgentAdapter):
                                 if clean_text.startswith(self.last_emitted_text):
                                     is_subset = True
                                     logger.debug(f"Subset detected: ignoring partial overlap.")
-                                    # If the 'subset' is significantly larger (10%) or previous was very short, treat as new growth
-                                    if len(clean_text) > len(self.last_emitted_text) * 1.1 or len(self.last_emitted_text) < 15:
+                                    # If the 'subset' has grown at all, we check if it's significant growth
+                                    if len(clean_text) > len(self.last_emitted_text) + 1:
                                         is_subset = False
 
                             if full_text and not is_duplicate and not is_subset and full_text != self.last_emitted_text:
@@ -759,12 +760,12 @@ class AntigravityAdapter(AgentAdapter):
                 return
 
             # 4. Auto-Approve (Safe)
+            # Only log auto-approvals to terminal/diagnostic, not the main chat
             await self.emit_diagnostic(f"✅ [SENTINEL] Auto-approving safe command: '{pending_command[:50]}...'")
             allow_btn = self.window.child_window(title="Allow", control_type="Button")
             
             if await asyncio.to_thread(allow_btn.exists, timeout=0.5):
                 await asyncio.to_thread(allow_btn.click)
-                await self.emit_message(f"✅ **Sentinel:** Auto-approved safe command: `{pending_command[:100]}`")
                 self.last_sentinel_action_time = time.time()
             else:
                 # Try finding by text if button title is different
@@ -772,7 +773,6 @@ class AntigravityAdapter(AgentAdapter):
                 for b in btns:
                     if "Allow" in b.window_text():
                         await asyncio.to_thread(b.click)
-                        await self.emit_message(f"✅ **Sentinel:** Auto-approved (Alt) `{pending_command[:100]}`")
                         self.last_sentinel_action_time = time.time()
                         break
         except Exception as e:
