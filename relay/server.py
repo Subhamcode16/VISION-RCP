@@ -25,7 +25,7 @@ from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING, # Reduced to clear terminal for DB-PULSE
     format="%(asctime)s │ %(levelname)-7s │ %(name)-18s │ %(message)s",
 )
 logger = logging.getLogger("rcp.relay")

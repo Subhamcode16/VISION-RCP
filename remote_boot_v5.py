@@ -26,7 +26,7 @@ async def run_relay():
         pass
 
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "uvicorn", "server:app", "--port", str(RELAY_PORT), "--host", "0.0.0.0",
+        sys.executable, "-m", "uvicorn", "server:app", "--port", str(RELAY_PORT), "--host", "0.0.0.0", "--log-level", "error",
         cwd=str(Path("relay")),
         stdout=None, # Direct to terminal to avoid buffer hang
         stderr=None

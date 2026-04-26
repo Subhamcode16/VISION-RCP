@@ -459,12 +459,13 @@ class AntigravityAdapter(AgentAdapter):
         try:
             # Stage 23: Diagnostic Sweep (Every 5 seconds)
             # This logs raw coordinates to help the user identify the AI side
-            debug_pulse = (int(time.time()) % 10 < 2) # Pulse for 2 seconds every 10
+            debug_pulse = (int(time.time()) % 10 < 3) 
             
             # 1. Capture EVERYTHING that has text (Targeted Scans for Speed)
             text_bearing = []
             candidates = []
-            for c_type in ["ListItem", "Text", "Static"]:
+            # Extended search for more UI types (Group, Pane, and Custom often hold text in newer VS Code)
+            for c_type in ["ListItem", "Text", "Static", "Group", "Pane", "Custom"]:
                 try: candidates.extend(self.window.descendants(control_type=c_type))
                 except: continue
                 
@@ -474,7 +475,8 @@ class AntigravityAdapter(AgentAdapter):
                     txt = it.window_text().strip()
                     if txt:
                         if debug_pulse:
-                            logger.info(f" [SCRAPER-DEBUG] L:{rect.left} T:{rect.top} | '{txt[:30]}...'")
+                            # FORCE PRINT to terminal so it's not buried in logs
+                            print(f" [DB-PULSE] L:{rect.left} T:{rect.top} | '{txt[:40]}...'")
                         
                         # Filter noise
                         if len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
