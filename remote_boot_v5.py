@@ -40,12 +40,17 @@ async def run_tunnel(port: int):
     log_file = Path("tunnel_boot.log")
     if log_file.exists(): log_file.unlink()
 
-    # Launch cloudflared and redirect ALL output to a file
-    # We use 'start /b' to run in background in the same window context
-    cmd = f"cloudflared tunnel --url http://localhost:{port} > {log_file} 2>&1"
+    # Launch cloudflared and redirect ALL output to a file handle
+    # This is more reliable than shell redirection on Windows
+    log_fh = open(log_file, "wb")
     
     # We use Popen here because we want it to run detached from the pipe
-    proc = subprocess.Popen(["cmd", "/c", cmd], creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0)
+    proc = subprocess.Popen(
+        ["cloudflared", "tunnel", "--url", f"http://localhost:{port}"],
+        stdout=log_fh,
+        stderr=log_fh,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
+    )
     
     tunnel_url = None
     start_time = time.time()
