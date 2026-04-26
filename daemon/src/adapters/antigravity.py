@@ -144,6 +144,8 @@ class AntigravityAdapter(AgentAdapter):
             re.compile(r"Mobile Resilience", re.I),
             re.compile(r"Short-Circuit Link", re.I),
             re.compile(r"^(Generating|Analyzing|Starting|Connecting|Stopping|Retrying|Searching|Found|Success|Completed).{1,5}$", re.I),
+            re.compile(r"^(Acknowledging|Processing|Observing|I'm processing|Reconciling|Observed|However, I've).*", re.I),
+            re.compile(r"^(metadata|keyboardinterrupt|manually terminated|apparent interruption).*", re.I),
             # Stage 22: Enhanced Meta-Commentary Purge
             re.compile(r"Acknowledge and Contextualize", re.I),
             re.compile(r"see the user's greeting", re.I),
@@ -368,7 +370,7 @@ class AntigravityAdapter(AgentAdapter):
         for line in processed_lines:
             # 1. Determine Item Type
             is_numbered = len(line) > 2 and line[0].isdigit() and (line[1] == "." or line[1] == ")")
-            markers_pattern = ("*", "-", "•", "—", "▸", "▹", "▪", "▫", "·", "»", "✅", "❌")
+            markers_pattern = ("*", "-", "•", "—", "▸", "▹", "▪", "▫", "·", "»", "✅", "❌", "!", "?")
             is_list = any(line.startswith(m) for m in markers_pattern) or is_numbered
             
             # Header Strictness
@@ -381,7 +383,14 @@ class AntigravityAdapter(AgentAdapter):
                 if last_item_type == "text":
                     blocks.append(" ".join(current_block)) # JOIN TEXT WITH SPACES
                 else:
-                    blocks.append("\n".join(current_block)) # KEEP LISTS/HEADERS VERTICAL
+                    # ENSURE BULLETS HAVE SPACE FOR MARKDOWN
+                    processed_block = []
+                    for b in current_block:
+                        if b and b[0] in markers_pattern and (len(b) == 1 or b[1] != ' '):
+                            processed_block.append(f"{b[0]} {b[1:].strip()}")
+                        else:
+                            processed_block.append(b)
+                    blocks.append("\n".join(processed_block)) # KEEP LISTS/HEADERS VERTICAL
                 current_block = []
 
             # 3. Add to Current Block
@@ -393,7 +402,14 @@ class AntigravityAdapter(AgentAdapter):
             if last_item_type == "text":
                 blocks.append(" ".join(current_block))
             else:
-                blocks.append("\n".join(current_block))
+                processed_block = []
+                markers_pattern = ("*", "-", "•", "—", "▸", "▹", "▪", "▫", "·", "»", "✅", "❌", "!", "?")
+                for b in current_block:
+                    if b and b[0] in markers_pattern and (len(b) == 1 or b[1] != ' '):
+                        processed_block.append(f"{b[0]} {b[1:].strip()}")
+                    else:
+                        processed_block.append(b)
+                blocks.append("\n".join(processed_block))
 
         # 4. Join blocks with appropriate spacing
         # Double newlines between different types of content
