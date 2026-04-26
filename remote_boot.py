@@ -43,27 +43,29 @@ async def run_tunnel(port: int):
     tunnel_url = None
     # We read stderr where cloudflared logs the URL
     try:
-        # Progress feedback for the user
-        if _ % 4 == 0:
-            print(".", end="", flush=True)
+        # Give it up to 30 seconds
+        for _ in range(120):
+            # Progress feedback for the user
+            if _ % 4 == 0:
+                print(".", end="", flush=True)
 
-        try:
-            line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.25)
-            if not line_bytes: break
-            line = line_bytes.decode(errors='replace').strip()
-            # Still print cloudflared logs if they contain something interesting
-            if "error" in line.lower() or "failed" in line.lower():
-                print(f"\n  [cloudflared-err] {line}")
-            
-            if ".trycloudflare.com" in line:
-                match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", line)
-                if match:
-                    tunnel_url = match.group(1)
-                    print("\n") # End progress line
-                    log(f"Tunnel established: {tunnel_url}")
-                    return proc, tunnel_url
-        except asyncio.TimeoutError:
-            continue
+            try:
+                line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.25)
+                if not line_bytes: break
+                line = line_bytes.decode(errors='replace').strip()
+                # Still print cloudflared logs if they contain something interesting
+                if "error" in line.lower() or "failed" in line.lower():
+                    print(f"\n  [cloudflared-err] {line}")
+                
+                if ".trycloudflare.com" in line:
+                    match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", line)
+                    if match:
+                        tunnel_url = match.group(1)
+                        print("\n") # End progress line
+                        log(f"Tunnel established: {tunnel_url}")
+                        return proc, tunnel_url
+            except asyncio.TimeoutError:
+                continue
     except Exception as e:
         log(f"Tunnel error: {e}")
     
