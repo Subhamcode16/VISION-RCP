@@ -150,7 +150,8 @@ export function useRCP(url: string, sessionId?: string, relayToken?: string) {
         appendAgentMessage({
           type: payload.stream === 'agent_message' ? 'AGENT_MESSAGE' : 'APPROVAL_REQUEST',
           content,
-          timestamp: Number(payload.ts) * 1000
+          timestamp: Number(payload.ts) * 1000,
+          uid: payload.uid as string
         });
         if (payload.stream === 'approval_request') {
           setAgentStatus('awaiting_approval');

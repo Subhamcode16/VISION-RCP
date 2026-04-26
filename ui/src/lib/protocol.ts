@@ -97,6 +97,7 @@ export interface LogLine {
   stream: StreamType;
   data: string;
   ts: number;
+  uid?: string;
 }
 
 export interface GraphNode {
@@ -120,6 +121,7 @@ export interface AgentEvent {
   type: 'AGENT_MESSAGE' | 'APPROVAL_REQUEST' | 'AGENT_STATUS';
   content: string;
   timestamp: number;
+  uid?: string;
   source?: 'user' | 'agent' | 'system';
 }
 

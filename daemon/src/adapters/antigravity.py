@@ -634,7 +634,15 @@ class AntigravityAdapter(AgentAdapter):
                             
                             is_duplicate = text_hash in self.emitted_hashes
                             
-                            if full_text and not is_duplicate and full_text != self.last_emitted_text:
+                            # Subset Guard: If this new text contains the previous emitted text 
+                            # as a prefix, it's just a more complete capture of the same message.
+                            is_subset = False
+                            if self.last_emitted_text and len(clean_text) > len(self.last_emitted_text):
+                                if clean_text.startswith(self.last_emitted_text):
+                                    is_subset = True
+                                    logger.debug(f"Subset detected: ignoring partial overlap.")
+
+                            if full_text and not is_duplicate and not is_subset and full_text != self.last_emitted_text:
                                 await self.emit_message(full_text)
                                 self.last_emitted_text = full_text
                                 self.emitted_hashes.append(text_hash)

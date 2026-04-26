@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -114,6 +115,7 @@ class LogEntry:
     stream: str  # stdout | stderr | system
     data: str
     ts: float = field(default_factory=time.time)
+    uid: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -122,4 +124,5 @@ class LogEntry:
             "stream": self.stream,
             "data": self.data,
             "ts": self.ts,
+            "uid": self.uid,
         }

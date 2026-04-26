@@ -57,6 +57,7 @@ interface RCPState {
   setAgentStatus: (status: 'idle' | 'running' | 'awaiting_approval') => void;
   setActiveAdapter: (name: string | null) => void;
   clearAgentMessages: () => void;
+  processedUids: Set<string>;
 
   /* Session */
   session: SessionInfo | null;
@@ -162,10 +163,30 @@ export const useStore = create<RCPState>()(
     status: 'idle',
     activeAdapter: null,
   },
+  processedUids: new Set<string>(),
   appendAgentMessage: (msg) =>
-    set((state) => ({
-      agent: { ...state.agent, messages: [...state.agent.messages, msg] },
-    })),
+    set((state) => {
+      // 1. UID Deduplication (Stage UUID)
+      if (msg.uid && state.processedUids.has(msg.uid)) {
+        console.debug('[STORE] Dropping duplicate message by UID:', msg.uid);
+        return state;
+      }
+
+      // 2. Content Deduplication (Existing guard)
+      const lastMsg = state.agent.messages[state.agent.messages.length - 1];
+      if (lastMsg && lastMsg.content === msg.content && lastMsg.type === msg.type) {
+        return state;
+      }
+
+      // Track UID if provided
+      if (msg.uid) {
+        state.processedUids.add(msg.uid);
+      }
+
+      return {
+        agent: { ...state.agent, messages: [...state.agent.messages, msg] },
+      };
+    }),
   setAgentStatus: (status) =>
     set((state) => ({
       agent: { ...state.agent, status },
