@@ -43,22 +43,27 @@ async def run_tunnel(port: int):
     tunnel_url = None
     # We read stderr where cloudflared logs the URL
     try:
-        # Give it up to 30 seconds
-        for _ in range(120):
-            try:
-                line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.25)
-                if not line_bytes: break
-                line = line_bytes.decode(errors='replace').strip()
-                if VERBOSE: print(f"  [cloudflared] {line}")
-                
-                if ".trycloudflare.com" in line:
-                    match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", line)
-                    if match:
-                        tunnel_url = match.group(1)
-                        log(f"Tunnel established: {tunnel_url}")
-                        return proc, tunnel_url
-            except asyncio.TimeoutError:
-                continue
+        # Progress feedback for the user
+        if _ % 4 == 0:
+            print(".", end="", flush=True)
+
+        try:
+            line_bytes = await asyncio.wait_for(proc.stderr.readline(), timeout=0.25)
+            if not line_bytes: break
+            line = line_bytes.decode(errors='replace').strip()
+            # Still print cloudflared logs if they contain something interesting
+            if "error" in line.lower() or "failed" in line.lower():
+                print(f"\n  [cloudflared-err] {line}")
+            
+            if ".trycloudflare.com" in line:
+                match = re.search(r"(https://[\w\.-]+\.trycloudflare\.com)", line)
+                if match:
+                    tunnel_url = match.group(1)
+                    print("\n") # End progress line
+                    log(f"Tunnel established: {tunnel_url}")
+                    return proc, tunnel_url
+        except asyncio.TimeoutError:
+            continue
     except Exception as e:
         log(f"Tunnel error: {e}")
     
@@ -90,21 +95,17 @@ async def main():
     daemon_proc = None
     
     try:
-        # 1. Start Relay
-        relay_proc = await run_relay()
-        await asyncio.sleep(2) # Give relay a moment to bind
-        
-        # 2. Start Tunnel
-        if not os.path.exists(os.path.expanduser("~") + "/bin/cloudflared.exe") and \
-           not subprocess.run(["where", "cloudflared"], capture_output=True, shell=True).returncode == 0:
-            log("CRITICAL: 'cloudflared' not found. Please install it to enable mobile access.")
-            return
-
+        # 1. Start Tunnel FIRST (provides the public URL needed by daemon)
         log("Establishing Cloudflare Tunnel (be patient)...")
         tunnel_proc, public_url = await run_tunnel(RELAY_PORT)
         if not public_url:
             log("FAILED: Could not establish tunnel.")
             return
+
+        # 2. Start Relay
+        log("Starting Relay server...")
+        relay_proc = await run_relay()
+        await asyncio.sleep(2) 
 
         # 3. Start Daemon
         log("Booting Vision-RCP Daemon...")
