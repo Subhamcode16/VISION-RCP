@@ -4,12 +4,12 @@
   justify-content: space-between;
   height: 32px;
   padding: 0 20px;
-  background: var(--zinc-950);
-  border-top: 1px solid var(--zinc-900);
+  background: var(--color-zinc-950);
+  border-top: 1px solid var(--color-zinc-900);
   flex-shrink: 0;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  color: var(--zinc-500);
+  color: var(--color-zinc-500);
 }
 
 .status-bar__left,
@@ -36,5 +36,5 @@
 }
 
 .status-bar__item:hover {
-  color: var(--zinc-300);
+  color: var(--color-zinc-300);
 }

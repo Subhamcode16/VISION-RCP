@@ -96,15 +96,39 @@ class RelayClient:
                     # Generate and log the full remote access link for scanning/copying
                     import os
                     dashboard = os.environ.get("VITE_DASHBOARD_URL")
+                    relay_public = os.environ.get("RELAY_PUBLIC_URL")
+                    
                     if dashboard and self._secret_key:
+                        # Construct the relay parameter for the frontend
+                        # If a public tunnel is active, use it. Otherwise fallback to the direct relay URL.
+                        r_param = ""
+                        if relay_public:
+                            # Convert http -> wss for secure frontend connectivity
+                            relay_ws = relay_public.replace("http://", "wss://").replace("https://", "wss://")
+                            r_param = f"&r={relay_ws.rstrip('/')}/ws/client"
+                        
                         full_link = (f"{dashboard.rstrip('/')}/"
                                      f"?s={self._session_id}"
                                      f"&t={client_token}"
-                                     f"&k={self._secret_key}")
+                                     f"&k={self._secret_key}"
+                                     f"{r_param}")
+                        
                         # Use print for visibility over standard logging in some terminal environments
                         print("\n" + "="*60)
                         print(f" [REMOTE DASHBOARD READY]")
                         print(f" URL: {full_link}")
+                        
+                        try:
+                            import qrcode
+                            qr = qrcode.QRCode(version=1, box_size=1, border=2)
+                            # Truncate link for QR if it's too long, but keep params
+                            qr.add_data(full_link)
+                            qr.make(fit=True)
+                            print("\n [REMOTE SCAN] Scan to take control from mobile:")
+                            qr.print_ascii(invert=True)
+                        except Exception as qr_err:
+                            logger.warning("Could not generate QR code: %s", qr_err)
+                            
                         print("="*60 + "\n")
                         logger.info("Remote dashboard link generated")
             except Exception as e:

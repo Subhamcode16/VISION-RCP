@@ -25,5 +25,4 @@ class AdapterRegistry:
 
 # Pre-register built-in adapters
 AdapterRegistry.register("antigravity", AntigravityAdapter)
-# Pre-register built-in adapters
-AdapterRegistry.register("antigravity", AntigravityAdapter)
+AdapterRegistry.register("antigravity_pty", AntigravityAdapter)

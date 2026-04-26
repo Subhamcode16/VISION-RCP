@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #ffffff;    /* Chrome White */
+  --color-secondary: #d4d4d8;  /* Titanium Gray */
+  --color-accent: #f4f4f5;     /* Quartz */
+  --color-neutral: #71717a;
+  
+  --font-display: "Outfit", "Inter", sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+@utility btn-primary {
+  padding: 0.875rem 2.5rem;
+  background-color: white;
+  color: black;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px -8px rgba(255, 255, 255, 0.4);
+    background-color: #f4f4f5;
+  }
+}
+
+@utility btn-secondary {
+  padding: 0.875rem 2.5rem;
+  background-color: rgba(9, 9, 11, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  &:hover {
+    background-color: rgba(24, 24, 27, 0.8);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
+  }
+}
+
+@utility section-header-h1 {
+  @apply text-4xl md:text-6xl font-extrabold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60 text-center uppercase py-2;
+}
+
+:root {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #030303;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: #030303;
+}
+
+#root {
+  width: 100%;
+}

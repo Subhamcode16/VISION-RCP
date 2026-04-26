@@ -139,7 +139,13 @@ class AntigravityAdapter(AgentAdapter):
             re.compile(r"located .+ (in )?C:\\", re.I),
             re.compile(r"request (is )?simple", re.I),
             re.compile(r"complex code is needed", re.I),
-            re.compile(r"listing contents, nothing more", re.I)
+            re.compile(r"listing contents, nothing more", re.I),
+            # Stage 22: Enhanced Meta-Commentary Purge
+            re.compile(r"Acknowledge and Contextualize", re.I),
+            re.compile(r"see the user's greeting", re.I),
+            re.compile(r"priority is to acknowledge", re.I),
+            re.compile(r"follow global rule", re.I),
+            re.compile(r"asking \d+-\d+ mandatory questions", re.I)
         ]
 
         # Bootstrap patterns (Redirect to terminal, not chat)
@@ -155,10 +161,25 @@ class AntigravityAdapter(AgentAdapter):
         self.emit_buffer: List[str] = []
         self.last_fragment_time = 0.0
         self.last_emitted_text: Optional[str] = None
-        self.flush_delay = 1.5 # Increased for structural stability
+        self.flush_delay = 2.0 # Increased further to ensure full sentence capture
         self.last_send_time = 0.0 # Throttling for typing-echo
         self.is_thinking = False
         self.thinking_messages = []
+        
+        # --- Sentinel Agent State ---
+        self.sentinel_enabled = True
+        self.risky_patterns = [
+            re.compile(r"\brm\b", re.I),
+            re.compile(r"\bdel\b", re.I),
+            re.compile(r"\berase\b", re.I),
+            re.compile(r"\bformat\b", re.I),
+            re.compile(r"\bmkfs\b", re.I),
+            re.compile(r"\bfdisk\b", re.I),
+            re.compile(r"rd\s+/s", re.I),
+            re.compile(r"powershell\s+.*Remove-Item", re.I),
+            re.compile(r"system32", re.I)
+        ]
+        self.last_sentinel_action_time = 0.0
 
     async def start(self, config: Dict[str, Any]) -> None:
         """Connect to the running Antigravity application (Non-blocking)."""
@@ -306,10 +327,13 @@ class AntigravityAdapter(AgentAdapter):
             return ""
             
         processed_lines = []
-        pending_bullet = None # Stage 12: Glue stray bullets to text
+        pending_bullet = None
         
         for frag in buffer:
             try:
+                # Stage 22: Smart Line Splitting
+                # If a fragment contains multiple lines, we still treat them as related
+                # but we strip leading/trailing whitespace carefully.
                 lines = str(frag).split("\n")
                 for line in lines:
                     cleaned = line.strip()
@@ -340,28 +364,20 @@ class AntigravityAdapter(AgentAdapter):
         for line in processed_lines:
             # 1. Determine Item Type
             is_numbered = len(line) > 2 and line[0].isdigit() and (line[1] == "." or line[1] == ")")
-            
-            # Expanded marker check for all common bullet symbols
             markers_pattern = ("*", "-", "•", "—", "▸", "▹", "▪", "▫", "·", "»", "✅", "❌")
-            is_list = any(line.startswith(m) for m in markers_pattern) or is_numbered or \
-                      (len(line) > 0 and (ord(line[0]) > 0x2000 or ord(line[0]) >= 0x1F300))
+            is_list = any(line.startswith(m) for m in markers_pattern) or is_numbered
             
-            # Header Strictness: Must have at least 2 words to avoid "today:" or "here:"
+            # Header Strictness
             is_header = not is_list and line.endswith(":") and len(line) < 60 and len(line.split()) > 1
             current_type = "list" if is_list else ("header" if is_header else "text")
 
-            # Standardize list markers
-            if is_list and not is_numbered and not line.startswith("*"):
-                # Preserve the original fancy marker if it's not a standard bullet
-                if not any(line.startswith(m) for m in ("*", "-", "•")):
-                    pass 
-                else:
-                    line = "* " + line.lstrip("•-— ").strip()
-
-            # 2. Handle Block Transitions
+            # 2. Handle Block Transitions and Joining
             if last_item_type is not None and current_type != last_item_type:
                 # Flush the previous block
-                blocks.append("\n".join(current_block))
+                if last_item_type == "text":
+                    blocks.append(" ".join(current_block)) # JOIN TEXT WITH SPACES
+                else:
+                    blocks.append("\n".join(current_block)) # KEEP LISTS/HEADERS VERTICAL
                 current_block = []
 
             # 3. Add to Current Block
@@ -370,12 +386,16 @@ class AntigravityAdapter(AgentAdapter):
 
         # Flush final block
         if current_block:
-            blocks.append("\n".join(current_block))
+            if last_item_type == "text":
+                blocks.append(" ".join(current_block))
+            else:
+                blocks.append("\n".join(current_block))
 
-        # 4. Join blocks with double newlines for visual separation
+        # 4. Join blocks with appropriate spacing
+        # Double newlines between different types of content
         final_text = "\n\n".join(blocks).strip()
         
-        # Stage 17: Anchor Scrubbing & Response Focusing
+        # Stage 17/22: Anchor Scrubbing & Response Focusing
         ANCHOR_PHRASES = [
             "I have successfully accessed the", 
             "I have successfully",
@@ -387,7 +407,6 @@ class AntigravityAdapter(AgentAdapter):
             "This session focused on"
         ]
         
-        # Fuzzy search for an anchor to purge leading noise/planning text
         lower_text = final_text.lower()
         earliest_anchor_pos = -1
         
@@ -397,19 +416,15 @@ class AntigravityAdapter(AgentAdapter):
                 if earliest_anchor_pos == -1 or pos < earliest_anchor_pos:
                     earliest_anchor_pos = pos
         
-        if earliest_anchor_pos != -1:
-            # Slice the text from the anchor point onwards
-            # Only scrub if the anchor is in the first half of the message (to avoid accidental internal scrubs)
-            if earliest_anchor_pos < len(final_text) / 2:
-                final_text = final_text[earliest_anchor_pos:].strip()
+        if earliest_anchor_pos != -1 and earliest_anchor_pos < len(final_text) / 2:
+            final_text = final_text[earliest_anchor_pos:].strip()
 
-        # Final Formatting Polish: Ensure verticality for common patterns
-        # If we see multiple dots (file extensions) without newlines, force them.
-        file_exts = (".md", ".txt", ".py", ".ts", ".js", ".json", ".css")
-        for ext in file_exts:
-            if final_text.count(ext) > 1 and f"{ext} " in final_text:
-                final_text = final_text.replace(f"{ext} ", f"{ext}\n")
-        
+        # Final Formatting: If text is still suspiciously fragmented, verify joining
+        # (This handles the case where every word was a separate 'text' block)
+        if last_item_type == "text" and "\n" in final_text and final_text.count("\n") > final_text.count(". "):
+             # Likely a false-positive for verticality in a continuous paragraph
+             final_text = final_text.replace("\n", " ").replace("  ", " ")
+
         return final_text
 
     def _get_message_count(self) -> int:
@@ -628,12 +643,79 @@ class AntigravityAdapter(AgentAdapter):
                         await self.emit_diagnostic(f"[BRIDGE] Join error: {e}")
                         logger.error(f"Semantic join failed: {e}")
                 
+                # Stage 23: Sentinel Agent Scan (Auto-Approval)
+                if self.sentinel_enabled and time.time() - self.last_sentinel_action_time > 3.0:
+                    await self._run_sentinel_check()
+                
                 await asyncio.sleep(self.polling_interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.debug(f"Monitoring glitch: {e}")
                 await asyncio.sleep(self.polling_interval)
+
+    async def _run_sentinel_check(self) -> None:
+        """Searches for 'Run command?' prompts and applies guardrails."""
+        if not self.window:
+            return
+
+        try:
+            # 1. Look for the 'Run command?' trigger
+            trigger = self.window.child_window(title="Run command?", control_type="Text")
+            if not await asyncio.to_thread(trigger.exists, timeout=0.1):
+                return
+
+            # 2. Extract the command text (usually in a sibling or nearby group)
+            # We look for the first 'Text' or 'Edit' element that looks like a command block
+            descendants = await asyncio.to_thread(self.window.descendants)
+            trigger_idx = -1
+            for i, d in enumerate(descendants):
+                if d.window_text() == "Run command?":
+                    trigger_idx = i
+                    break
+            
+            if trigger_idx == -1:
+                return
+
+            pending_command = ""
+            # Search forward from the trigger to find the command block
+            for i in range(trigger_idx + 1, min(trigger_idx + 10, len(descendants))):
+                text = descendants[i].window_text().strip()
+                if text and len(text) > 5 and not any(btn in text for btn in ["Allow", "Deny", "Run command?"]):
+                    pending_command = text
+                    break
+
+            if not pending_command:
+                return
+
+            # 3. Apply Guardrails
+            is_risky = any(p.search(pending_command) for p in self.risky_patterns)
+            
+            if is_risky:
+                await self.emit_diagnostic(f"🛡️ [SENTINEL] GUARDRAIL TRIGGERED: Risky command detected - '{pending_command[:50]}...'")
+                await self.emit_message(f"⚠️ **Sentinel Guardrail:** A potentially destructive command was blocked for your review: `{pending_command}`")
+                self.last_sentinel_action_time = time.time() # Cooldown to prevent spam
+                return
+
+            # 4. Auto-Approve (Safe)
+            await self.emit_diagnostic(f"✅ [SENTINEL] Auto-approving safe command: '{pending_command[:50]}...'")
+            allow_btn = self.window.child_window(title="Allow", control_type="Button")
+            
+            if await asyncio.to_thread(allow_btn.exists, timeout=0.5):
+                await asyncio.to_thread(allow_btn.click)
+                await self.emit_message(f"✅ **Sentinel:** Auto-approved safe command: `{pending_command[:100]}`")
+                self.last_sentinel_action_time = time.time()
+            else:
+                # Try finding by text if button title is different
+                btns = await asyncio.to_thread(self.window.descendants, control_type="Button")
+                for b in btns:
+                    if "Allow" in b.window_text():
+                        await asyncio.to_thread(b.click)
+                        await self.emit_message(f"✅ **Sentinel:** Auto-approved (Alt) `{pending_command[:100]}`")
+                        self.last_sentinel_action_time = time.time()
+                        break
+        except Exception as e:
+            logger.debug(f"Sentinel check failed: {e}")
 
     async def interrupt(self) -> None:
         """Simulate an interrupt by sending Escape or a stop command if buttons exist."""

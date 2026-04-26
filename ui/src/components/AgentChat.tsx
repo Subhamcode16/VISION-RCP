@@ -249,6 +249,7 @@ export function AgentChat({ rcp }: AgentChatProps) {
         <AiChatInput 
           onSendMessage={handleSendMessage}
           isLoading={isStarting || agent.status === 'awaiting_approval'}
+          agentStatus={agent.status}
         />
       </div>
     </div>

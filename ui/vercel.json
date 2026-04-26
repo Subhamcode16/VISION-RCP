@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "name": "vision-rcp-ui",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

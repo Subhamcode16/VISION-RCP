@@ -14,6 +14,9 @@ import socket
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import uvicorn
 
 from .config import Config
@@ -28,7 +31,7 @@ def setup_logging(log_level: str, data_dir: Path):
     
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_fmt = logging.Formatter("%(asctime)s │ %(levelname)-7s │ %(name)-20s │ %(message)s", datefmt="%H:%M:%S")
+    console_fmt = logging.Formatter("%(asctime)s | %(levelname)-7s | %(name)-20s | %(message)s", datefmt="%H:%M:%S")
     console_handler.setFormatter(console_fmt)
     
     # File handler
@@ -54,11 +57,19 @@ BANNER = r"""
 """
 
 
-def find_free_port() -> int:
-    """Find a random available port by binding to port 0."""
+def find_free_port(preferred: int = 9077) -> int:
+    """Find an available port. Tries the preferred port first."""
+    # Try the preferred port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", preferred))
+            return preferred
+        except OSError:
+            pass
+
+    # Fallback to random if preferred is busy
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
 
 
@@ -71,11 +82,11 @@ class StartupPulse:
         self.last_pulse = self.start_time
 
     def pulse(self, name: str):
-        now = time.perf_counter()
-        total_elapsed = now - self.start_time
+        now = time.time()
         delta = now - self.last_pulse
+        total_elapsed = now - self.start_time
         self.last_pulse = now
-        print(f"  [PULSE] {name:<30} │ +{delta:6.3f}s │ Total: {total_elapsed:6.3f}s")
+        print(f"  [PULSE] {name:<30} | +{delta:6.3f}s | Total: {total_elapsed:6.3f}s")
         logging.info("STARTUP_PULSE: %s (delta: %.3fs, total: %.3fs)", name, delta, total_elapsed)
 
 def main() -> None:
@@ -109,8 +120,8 @@ def main() -> None:
     secret_key = auth_temp.display_secret
     pulse.pulse("AuthManager (pre-init) ready")
 
-    # Determine port
-    port = config.daemon["port"] or find_free_port()
+    # Determine port (Force 9077 for local stability)
+    port = config.daemon["port"] or find_free_port(9077)
     host = config.daemon["host"]
     log_level = config.daemon["log_level"]
 
@@ -139,19 +150,8 @@ def main() -> None:
             print(f"  |  {remote_dashboard[54:108]:<54}|")
         print(f"  +----------------------------------------------------------+")
         
-        # Print QR Code if requested and library is available
-        try:
-            import qrcode
-            qr = qrcode.QRCode(version=1, box_size=1, border=2)
-            # Use a slightly more generic login link that just needs the key
-            qr_link = f"{remote_dashboard}/?k={secret_key}"
-            qr.add_data(qr_link)
-            qr.make(fit=True)
-            print("  [REMOTE SCAN] Scan to open on mobile:")
-            qr.print_ascii(invert=True)
-            print(f"  +----------------------------------------------------------+")
-        except Exception:
-            pass
+    # Remote Dashboard check (now handled by relay_client for session-specific links)
+    pass
 
     print(f"  |  Secret Key (manual copy):                               |")
     print(f"  |  {secret_key[:54]:<54}|")

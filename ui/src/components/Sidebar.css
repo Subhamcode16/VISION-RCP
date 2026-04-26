@@ -3,8 +3,8 @@
   flex-direction: column;
   height: 100%;
   padding: 24px 12px;
-  background: var(--zinc-950);
-  border-right: 1px solid var(--zinc-900);
+  background: var(--color-zinc-950);
+  border-right: 1px solid var(--color-zinc-900);
   position: relative;
 }
 
@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 12px 24px 12px;
-  border-bottom: 1px solid var(--zinc-900);
+  border-bottom: 1px solid var(--color-zinc-900);
   margin-bottom: 24px;
 }
 
@@ -26,9 +26,9 @@
 }
 
 .sidebar__close-btn {
-  background: var(--zinc-900);
-  border: 1px solid var(--zinc-800);
-  color: var(--zinc-400);
+  background: var(--color-zinc-900);
+  border: 1px solid var(--color-zinc-800);
+  color: var(--color-zinc-400);
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -40,7 +40,7 @@
 }
 
 .sidebar__close-btn:hover {
-  background: var(--zinc-800);
+  background: var(--color-zinc-800);
   color: #fff;
 }
 
@@ -56,7 +56,7 @@
   font-family: 'Outfit', sans-serif;
   font-size: 10px;
   font-weight: 700;
-  color: var(--zinc-600);
+  color: var(--color-zinc-600);
   margin-bottom: 12px;
   margin-left: 12px;
   letter-spacing: 0.1em;
@@ -77,19 +77,19 @@
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  color: var(--zinc-400);
+  color: var(--color-zinc-400);
   position: relative;
   border: 1px solid transparent;
 }
 
 .sidebar__item:hover {
   background: rgba(39, 39, 42, 0.3);
-  color: var(--zinc-100);
+  color: var(--color-zinc-100);
 }
 
 .sidebar__item.active {
   background: rgba(39, 39, 42, 0.6);
-  border-color: var(--zinc-800);
+  border-color: var(--color-zinc-800);
   color: #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
@@ -117,7 +117,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--zinc-800);
+  background: var(--color-zinc-800);
   transition: all 0.3s ease;
 }
 
@@ -130,7 +130,7 @@
   background: rgba(24, 24, 27, 0.4);
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid var(--zinc-900);
+  border: 1px solid var(--color-zinc-900);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -144,12 +144,12 @@
 }
 
 .sidebar__detail-label {
-  color: var(--zinc-500);
+  color: var(--color-zinc-500);
   font-weight: 500;
 }
 
 .sidebar__detail-value {
-  color: var(--zinc-300);
+  color: var(--color-zinc-300);
   font-family: 'JetBrains Mono', monospace;
 }
 

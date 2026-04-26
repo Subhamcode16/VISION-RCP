@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
 
 from .config import Config
@@ -32,6 +33,15 @@ class RCPServer:
     def __init__(self, config: Config):
         self._config = config
         self._app = FastAPI(title="Vision-RCP Daemon", docs_url=None, redoc_url=None)
+        
+        # Add CORS middleware to support Vercel/Mobile access
+        self._app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
         self._connections: dict[int, WebSocket] = {}
         self._connection_counter = 0
         self._actual_port: int = 0

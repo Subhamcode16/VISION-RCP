@@ -2,12 +2,12 @@
   display: flex;
   flex-direction: column;
   height: calc(100% - 24px);
-  background-color: var(--zinc-950);
-  color: var(--zinc-300);
+  background-color: var(--color-zinc-950);
+  color: var(--color-zinc-300);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   overflow: hidden;
-  border: 1px solid var(--zinc-900);
+  border: 1px solid var(--color-zinc-900);
   border-radius: 16px;
   margin: 12px;
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
@@ -20,7 +20,7 @@
   justify-content: space-between;
   padding: 14px 20px;
   background-color: rgba(24, 24, 27, 0.4);
-  border-bottom: 1px solid var(--zinc-900);
+  border-bottom: 1px solid var(--color-zinc-900);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -53,7 +53,7 @@
 .flow-audit__clear-btn {
   padding: 8px;
   border-radius: 8px;
-  color: var(--zinc-500);
+  color: var(--color-zinc-500);
   transition: all 0.2s ease;
   background: transparent;
   border: 1px solid transparent;
@@ -74,7 +74,7 @@
   flex-direction: column;
   gap: 8px;
   scrollbar-width: thin;
-  scrollbar-color: var(--zinc-800) transparent;
+  scrollbar-color: var(--color-zinc-800) transparent;
 }
 
 .flow-audit__empty {
@@ -83,7 +83,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--zinc-700);
+  color: var(--color-zinc-700);
   text-align: center;
   gap: 12px;
 }
@@ -101,7 +101,7 @@
 
 .flow-audit__packet:hover {
   background: rgba(39, 39, 42, 0.4);
-  border-color: var(--zinc-800);
+  border-color: var(--color-zinc-800);
   transform: translateX(4px);
 }
 
@@ -112,7 +112,7 @@
 }
 
 .flow-audit__timestamp {
-  color: var(--zinc-600);
+  color: var(--color-zinc-600);
   font-size: 9px;
   font-weight: 500;
 }
@@ -139,36 +139,36 @@
 }
 
 .flow-audit__cmd {
-  color: var(--zinc-100);
+  color: var(--color-zinc-100);
   font-weight: 600;
 }
 
 .flow-audit__payload-container {
   margin-left: 12px;
   padding-left: 14px;
-  border-left: 2px solid var(--zinc-900);
+  border-left: 2px solid var(--color-zinc-900);
 }
 
 .flow-audit__packet:hover .flow-audit__payload-container {
-  border-color: var(--zinc-800);
+  border-color: var(--color-zinc-800);
 }
 
 .flow-audit__payload {
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--zinc-500);
+  color: var(--color-zinc-500);
   line-height: 1.6;
   font-size: 11px;
 }
 
 .flow-audit__packet:hover .flow-audit__payload {
-  color: var(--zinc-300);
+  color: var(--color-zinc-300);
 }
 
 .flow-audit__footer {
   padding: 12px 20px;
   background-color: rgba(9, 9, 11, 0.8);
-  border-top: 1px solid var(--zinc-900);
+  border-top: 1px solid var(--color-zinc-900);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -179,7 +179,7 @@
   align-items: center;
   gap: 20px;
   font-size: 10px;
-  color: var(--zinc-500);
+  color: var(--color-zinc-500);
 }
 
 .flow-audit__footer-item {
@@ -197,7 +197,7 @@
 }
 
 .flow-audit__retention {
-  color: var(--zinc-600);
+  color: var(--color-zinc-600);
   font-style: italic;
   font-size: 9px;
 }

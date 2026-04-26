@@ -21,6 +21,11 @@ set "SCRIPT_DIR=%~dp0"
 set "DATA_DIR=%USERPROFILE%\.vision-rcp"
 
 :: --- PORT CONFLICT DETECTION ---
+echo [SYSTEM] Cleaning zombie processes...
+taskkill /F /IM node.exe /T >nul 2>&1
+taskkill /F /IM python.exe /T >nul 2>&1
+taskkill /F /IM msedge.exe /FI "WINDOWTITLE eq Vision-RCP*" >nul 2>&1
+
 echo [SYSTEM] Checking for port conflicts...
 for %%p in (9077 8080 5173) do (
     for /f "tokens=5" %%a in ('netstat -aon ^| findstr :%%p ^| findstr LISTENING') do (
@@ -61,6 +66,8 @@ set "SECRET_KEY=LOCAL"
 if exist "%DATA_DIR%\secret.key" (
     set /p SECRET_KEY=<"%DATA_DIR%\secret.key"
 )
+:: Trim trailing whitespace/CR if any
+set "SECRET_KEY=%SECRET_KEY: =%"
 
 :: --- LAUNCH ---
 echo [START] Launching full stack...
@@ -72,8 +79,19 @@ start "Vision-RCP UI" cmd /c "cd /d %SCRIPT_DIR%ui && npm run dev"
 start "Vision-RCP Relay" cmd /c "call %SCRIPT_DIR%daemon\.venv\Scripts\activate.bat && python -m relay.server"
 
 :: 3. Launch App Window (Wait for UI to warm up)
-echo [WAIT] Waiting for Vite server init...
-timeout /t 3 /nobreak >nul
+echo [WAIT] Waiting for Vite server readiness (Port 5173)...
+:WAIT_VITE
+timeout /t 1 /nobreak >nul
+netstat -aon | findstr :5173 | findstr LISTENING >nul
+if errorlevel 1 (
+    set /a VITE_WAITED+=1
+    if !VITE_WAITED! gtr 15 (
+        echo [ERROR] Vite server failed to start in time. Check UI terminal.
+        pause
+        exit /b 1
+    )
+    goto WAIT_VITE
+)
 
 set "DASHBOARD_URL=http://localhost:5173/?k=%SECRET_KEY%"
 echo [BROWSER] Opening Dashboard in App Mode...

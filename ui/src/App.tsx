@@ -24,11 +24,11 @@ function getInitialParams() {
 
   if (s || t || r || k) {
     return {
-      sessionId: s || undefined,
-      relayToken: t || undefined,
-      customRelay: r || undefined,
-      secretKey: k || undefined,
-      agentName: urlParams.get('a') || urlParams.get('agent') || undefined
+      sessionId: (s || undefined)?.trim(),
+      relayToken: (t || undefined)?.trim(),
+      customRelay: (r || undefined)?.trim(),
+      secretKey: (k || undefined)?.trim()?.replace(/\|$/, ''), // Strip trailing pipe from ASCII banners
+      agentName: (urlParams.get('a') || urlParams.get('agent') || undefined)?.trim()
     };
   }
 
@@ -72,11 +72,35 @@ function App() {
     }
   }, [agentName]);
   
-  let wsUrl = customRelay || (sessionId ? RELAY_WS : LOCAL_WS);
+  let wsUrl = (sessionId ? RELAY_WS : LOCAL_WS);
   
-  // Sanitize custom relay (r param) if it's just host:port
-  if (customRelay && !customRelay.includes('://')) {
-    wsUrl = `ws://${customRelay}/ws`;
+  // Sanitize custom relay (r param)
+  if (customRelay) {
+    if (/^\d+$/.test(customRelay)) {
+      // It's a pure port number
+      wsUrl = `ws://localhost:${customRelay}/ws`;
+    } else if (!customRelay.includes('://')) {
+      wsUrl = `ws://${customRelay}/ws`;
+    } else {
+      wsUrl = customRelay;
+    }
+  }
+
+  // Handle connection errors with a "Hard Reset" as requested
+  useEffect(() => {
+    if (connectionStatus === 'error') {
+      console.warn('Connection failed. Performing hard reset of session cache to defaults...');
+      localStorage.removeItem('vision_rcp_session');
+      // If it fails after clean URL load, something is fundamentally wrong with the daemon
+      if (!window.location.search) {
+        useStore.getState().setConnectionStatus('disconnected');
+      }
+    }
+  }, [connectionStatus]);
+  
+  // FORCE WSS if running on HTTPS (Vercel)
+  if (window.location.protocol === 'https:' && wsUrl.startsWith('ws://')) {
+    wsUrl = wsUrl.replace('ws://', 'wss://');
   }
   
   const rcp = useRCP(wsUrl, sessionId, relayToken);
@@ -96,8 +120,9 @@ function App() {
 
   const handleLogin = async (secret: string) => {
     setAuthError('');
+    const cleanSecret = secret.trim().replace(/\|$/, ''); // Clean pipes/spaces
     try {
-      await login(secret);
+      await login(cleanSecret);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';
       setAuthError(msg);

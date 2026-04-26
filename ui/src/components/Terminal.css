@@ -14,7 +14,7 @@
   background: rgba(9, 9, 11, 0.8);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--zinc-900);
+  border-bottom: 1px solid var(--color-zinc-900);
   flex-shrink: 0;
   z-index: 20;
 }
@@ -23,7 +23,7 @@
   font-family: 'Outfit', sans-serif;
   font-size: 11px;
   font-weight: 700;
-  color: var(--zinc-500);
+  color: var(--color-zinc-500);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   display: flex;
@@ -49,5 +49,5 @@
 }
 
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--zinc-800);
+  background: var(--color-zinc-800);
 }

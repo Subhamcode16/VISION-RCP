@@ -2,9 +2,10 @@
  * Vision-RCP Layout — Main 3-panel grid layout with session-aware header.
  */
 
-import React, { type ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 import { Menu } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { Logo } from './Logo';
 import './Layout.css';
 
 interface LayoutProps {
@@ -27,8 +28,7 @@ export function Layout({ sidebar, main, statusBar }: LayoutProps) {
           >
             <Menu size={20} />
           </button>
-          <span className="layout__icon">⬡</span>
-          <span className="layout__title mono">VISION-RCP</span>
+          <Logo size={24} showText={true} />
         </div>
         
         {session && (

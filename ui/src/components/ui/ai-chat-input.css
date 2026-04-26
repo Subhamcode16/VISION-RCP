@@ -1,0 +1,137 @@
+/* ═══════════════════════════════════════════════════
+   Vision-RCP AiChatInput — Glassmorphism Design
+   ═══════════════════════════════════════════════════ */
+
+.ai-chat-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(24, 24, 27, 0.4); /* Zinc-900 with transparency */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  padding: 8px 12px 8px 16px;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.ai-chat-pill:focus-within {
+  background: rgba(39, 39, 42, 0.6); /* Zinc-800 with transparency */
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* ─── Input Container ────────────────────────── */
+.ai-chat-pill__input-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ai-chat-pill__textarea {
+  width: 100%;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--color-zinc-100);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  padding: 8px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ai-chat-pill__textarea::placeholder {
+  color: var(--color-zinc-500);
+}
+
+.ai-chat-pill__textarea:focus {
+  outline: none;
+}
+
+/* ─── Icons & Buttons ────────────────────────── */
+.ai-chat-pill__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--color-zinc-400);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.ai-chat-pill__btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-zinc-100);
+}
+
+/* ─── Status Indicator ───────────────────────── */
+.ai-chat-pill__status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-zinc-700);
+  flex-shrink: 0;
+  margin: 0 4px;
+  transition: all 0.3s ease;
+}
+
+.ai-chat-pill__status--online {
+  background: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+/* ─── V-Sign Send Button ─────────────────────── */
+.ai-chat-pill__send {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ai-chat-pill__send:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.ai-chat-pill__send:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.ai-chat-pill__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.ai-chat-pill__v-sign {
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.4));
+}

@@ -4,7 +4,12 @@ import asyncio
 import os
 import sys
 import webbrowser
+import socket
+import subprocess
+import signal
+import time
 from pathlib import Path
+from typing import List, Optional
 
 import click
 import uvicorn
@@ -20,6 +25,32 @@ def get_default_data_dir():
     return Path(os.path.expanduser("~/.vision-rcp"))
 
 
+def get_project_root():
+    """Calculate the absolute project root relative to this CLI file."""
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def is_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+
+def kill_port_owner(port: int):
+    """Find and kill the process listening on a specific port (Windows)."""
+    try:
+        # Find PID using netstat
+        output = subprocess.check_output(f'netstat -aon | findstr LISTENING | findstr :{port}', shell=True).decode()
+        for line in output.strip().split('\n'):
+            parts = line.split()
+            if len(parts) > 4:
+                pid = parts[-1]
+                click.secho(f"    [!] Port {port} is busy (PID {pid}). Killing...", fg="yellow")
+                subprocess.run(['taskkill', '/F', '/PID', pid], capture_output=True)
+                time.sleep(0.5)
+    except subprocess.CalledProcessError:
+        pass
+
+
 @click.group()
 @click.pass_context
 def cli(ctx):
@@ -29,7 +60,8 @@ def cli(ctx):
     ctx.obj = {
         'data_dir': data_dir,
         'config': Config(config_path=config_path if config_path.exists() else None),
-        'device': DeviceIdentity(data_dir=data_dir)
+        'device': DeviceIdentity(data_dir=data_dir),
+        'project_root': get_project_root()
     }
 
 
@@ -105,8 +137,8 @@ def start(ctx, name, relay_url, relay_token, local, headless):
             await asyncio.sleep(0.1)
             
         # Get the actual port if it was 0
-        actual_port = c_port = uvicorn_server.config.port
-        if c_port == 0 and uvicorn_server.servers:
+        actual_port = uvicorn_server.config.port
+        if actual_port == 0 and uvicorn_server.servers:
             for server_proc in uvicorn_server.servers:
                 for socket in server_proc.sockets:
                     actual_port = socket.getsockname()[1]
@@ -121,31 +153,18 @@ def start(ctx, name, relay_url, relay_token, local, headless):
         click.echo(f"    Secret:   {server.secret_key}")
         
         # 3. Handle Relay/Remote mode
-        if not local and config.relay['url']:
-            wait_count = 0
-            while wait_count < 10:
-                if server._relay_client and server._relay_client.session_id:
-                    break
-                await asyncio.sleep(1)
-                wait_count += 1
-            
-            if server._relay_client and server._relay_client.session_id:
-                sid = server._relay_client.session_id
-                rtok = server._relay_client.relay_token
-                
-                ui_base = config.daemon.get('ui_url', 'https://rcp.vision-rcp.com')
-                remote_url = f"{ui_base}?s={sid}&t={rtok}"
-                
-                click.secho("[+] Relay:    Connected", fg="blue")
-                click.secho(f"    Session:  {sid}", fg="blue", bold=True)
-                
-                if not headless:
-                    click.echo("\n[*] Scan to control remotely:\n")
-                    qr_text = QRGenerator.to_terminal(remote_url)
-                    click.echo(qr_text)
-                    click.echo(f"\n[!] Join Link: {remote_url}\n")
-            else:
-                click.secho("[!] Relay:    Offline (Connection failed)", fg="yellow")
+        if not local:
+             # Default to Vercel UI for remote access
+             ui_base = config.daemon.get('ui_url', 'https://vision-rcp-ui.vercel.app')
+             ws_local = f"ws://localhost:{actual_port}/ws"
+             remote_url = f"{ui_base}?r={ws_local}&k={server.secret_key}&a=antigravity"
+             
+             click.secho("[+] Remote Ready", fg="blue")
+             if not headless:
+                 click.echo("\n[*] Scan to control from Browser/Phone:\n")
+                 qr_text = QRGenerator.to_terminal(remote_url)
+                 click.echo(qr_text)
+                 click.echo(f"\n[!] Join Link: {remote_url}\n")
         
         # 4. Wait for uvicorn to finish
         await serve_task
@@ -173,36 +192,83 @@ def start(ctx, name, relay_url, relay_token, local, headless):
 @click.option('--no-browser', is_flag=True, default=True, help='Skip auto-opening browser (Default: True)')
 @click.pass_context
 def rcp(ctx, workspace, agent, agent_cmd, relay_url, relay_token, local, headless, no_browser):
-    """🚀 Start a remote-controlled Antigravity agent session.
+    """Start a remote-controlled Antigravity agent session."""
+    run_rcp_logic(ctx, workspace, agent, agent_cmd, relay_url, relay_token, local, headless, no_browser)
+
+
+@cli.command(name="connect")
+@click.option('--workspace', '-w', default='.', help='Project workspace path for the agent')
+@click.option('--agent', '-a', default='antigravity_pty', help='Agent adapter name')
+@click.option('--agent-cmd', default=None, help='Override agent CLI command')
+@click.option('--local', is_flag=True, help='Local-only mode (no remote tunnel)')
+@click.pass_context
+def connect(ctx, workspace, agent, agent_cmd, local):
+    """Start the full Vision-RCP stack and connect a remote agent."""
+    root = ctx.obj['project_root']
     
-    This is the all-in-one command that:
+    click.secho("\n[*] Initializing Vision-RCP Stack...", fg="cyan", bold=True)
     
-    \b
-    1. Starts the Vision-RCP daemon
-    2. Connects to the relay server
-    3. Spawns the Antigravity agent via PTY
-    4. Generates a QR code + join link
-    5. Auto-opens the dashboard in your browser
+    # 1. Check Port Conflicts
+    daemon_port = ctx.obj['config'].daemon.get('port', 9077)
+    relay_port = 8080
+    ui_port = 5173
     
-    \b
-    Examples:
-      vision-rcp rcp
-      vision-rcp rcp --workspace ./my-project
-      vision-rcp rcp --local --no-browser
-    """
+    for p in [daemon_port, relay_port, ui_port]:
+        if is_port_in_use(p):
+            click.echo(f"    [!] Port {p} is busy. Clearing...")
+            kill_port_owner(p)
+
+    # Track sub-processes for cleanup
+    subprocesses = []
+
+    try:
+        # 2. Start Relay Server
+        click.echo("    [+] Starting Relay Server...")
+        venv_python = root / "daemon" / ".venv" / "Scripts" / "python.exe"
+        if not venv_python.exists():
+            venv_python = "python"
+        
+        relay_proc = subprocess.Popen(
+            [str(venv_python), "-m", "relay.server"],
+            cwd=str(root),
+            creationflags=subprocess.CREATE_NEW_CONSOLE
+        )
+        subprocesses.append(relay_proc)
+        time.sleep(1)
+
+        # 3. Start UI Dev Server
+        click.echo("    [+] Starting UI Dev Server...")
+        ui_proc = subprocess.Popen(
+            ["cmd", "/c", "npm", "run", "dev"],
+            cwd=str(root / "ui"),
+            creationflags=subprocess.CREATE_NEW_CONSOLE
+        )
+        subprocesses.append(ui_proc)
+        time.sleep(2)
+
+        # 4. Run main RCP logic (Managed)
+        run_rcp_logic(ctx, workspace, agent, agent_cmd, None, None, local, False, False)
+
+    except KeyboardInterrupt:
+        click.echo("\n[*] Shutting down stack...")
+    finally:
+        # Cleanup ALL managed processes
+        for proc in subprocesses:
+            try:
+                # On Windows, taskkill is more reliable for console windows
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)], 
+                             capture_output=True, check=False)
+            except Exception:
+                proc.kill()
+        click.secho("[DONE] Stack stops.", fg="yellow")
+
+
+def run_rcp_logic(ctx, workspace, agent, agent_cmd, relay_url, relay_token, local, headless, no_browser):
     config = ctx.obj['config']
     device = ctx.obj['device']
-    
-    # Resolve workspace to absolute path
     workspace_path = os.path.abspath(workspace)
     
-    # Apply overrides
-    if relay_url: config.relay['url'] = relay_url
-    if relay_token: config.relay['token'] = relay_token
-    
-    # Banner
     click.echo("")
-    import sys
     click.secho("+-----------------------------------------------+", fg="cyan")
     click.secho("|                                               |", fg="cyan")
     click.secho("|      Vision RCP - Remote Agent Bridge         |", fg="cyan", bold=True)
@@ -212,53 +278,31 @@ def rcp(ctx, workspace, agent, agent_cmd, relay_url, relay_token, local, headles
     click.echo(f"  Machine:    {device.device_name}")
     click.echo(f"  Workspace:  {workspace_path}")
     click.echo(f"  Agent:      {agent}")
-    click.echo(f"  Mode:       {'Local' if local else 'Relay'}")
     click.echo("")
     
-    # Ensure device identity
     if not device.fingerprint:
-        click.echo("[*] First run — initializing device identity...")
-        data_dir = ctx.obj['data_dir']
-        data_dir.mkdir(parents=True, exist_ok=True)
         device.init()
-        click.secho("[OK] Device identity generated.", fg="green")
     
-    # Build the daemon server
     server = RCPServer(config)
     
     async def run_rcp_session():
-        # ── Step 0: Security TTL (24 Hour Window) ──────────────
+        is_local = local 
+        
+        # Session reaper
         async def session_reaper(limit_secs: int):
             await asyncio.sleep(limit_secs)
-            click.echo("")
-            click.secho("!" * 50, fg="red")
-            click.secho("  [!] 24-HOUR SECURITY WINDOW EXPIRED", fg="red", bold=True)
-            click.secho("  Closing remote session for security.", fg="red")
-            click.secho("!" * 50, fg="red")
-            click.echo("")
-            # Gracefully stop the server
             await uvicorn_server.shutdown()
-            os._exit(0) # Force exit to ensure background tasks stop
+            os._exit(0)
 
-        # Start the reaper
         asyncio.create_task(session_reaper(24 * 60 * 60))
 
-        # ── Step 1: Start Uvicorn ──────────────────────────────
         click.echo("[1/5] Starting daemon...")
-        
-        cfg_uvicorn = uvicorn.Config(
-            server.app,
-            host=config.daemon['host'],
-            port=config.daemon['port'],
-            log_level="error",
-        )
+        cfg_uvicorn = uvicorn.Config(server.app, host=config.daemon['host'], port=config.daemon['port'], log_level="error")
         uvicorn_server = uvicorn.Server(cfg_uvicorn)
         serve_task = asyncio.create_task(uvicorn_server.serve())
         
-        while not uvicorn_server.started:
-            await asyncio.sleep(0.1)
+        while not uvicorn_server.started: await asyncio.sleep(0.1)
         
-        # Get actual port
         actual_port = uvicorn_server.config.port
         if actual_port == 0 and uvicorn_server.servers:
             for sp in uvicorn_server.servers:
@@ -267,178 +311,101 @@ def rcp(ctx, workspace, agent, agent_cmd, relay_url, relay_token, local, headles
                     break
         
         server.set_port(actual_port)
-        
         click.secho(f"      [OK] Daemon online (port {actual_port})", fg="green")
-        click.echo(f"      Secret: {server.secret_key}")
         
-        # ── Step 2: Connect to Relay ───────────────────────────
-        session_id = None
-        relay_access_token = None
         dashboard_url = None
-        
-        if not local and config.relay['url']:
-            click.echo("[2/5] Connecting to relay...")
-            
-            wait_count = 0
-            while wait_count < 30:
-                if server._relay_client and server._relay_client.session_id:
-                    break
-                if wait_count % 5 == 0 and wait_count > 0:
-                    click.echo(f"      ... still waiting for relay ({30 - wait_count}s left)")
-                await asyncio.sleep(1)
-                wait_count += 1
-            
-            if server._relay_client and server._relay_client.session_id:
-                session_id = server._relay_client.session_id
-                relay_access_token = server._relay_client.relay_token
+        if not is_local:
+            click.echo("[2/5] Establishing remote access...")
+            tunnel_manager = TunnelManager()
+            try:
+                tunnel_info = await tunnel_manager.start(actual_port, provider="pinggy")
+                public_url = tunnel_info.public_url
                 
-                ui_base = config.daemon.get('ui_url', 'https://rcp.vision-rcp.com')
-                dashboard_url = f"{ui_base}?s={session_id}&t={relay_access_token}&k={server.secret_key}&a={agent}"
+                # Force WSS for public link
+                ws_tunnel = public_url.replace("https://", "wss://").replace("http://", "ws://")
+                if not ws_tunnel.endswith("/ws"): ws_tunnel = f"{ws_tunnel}/ws"
+
+                ui_base = config.daemon.get('ui_url', 'https://vision-rcp-ui.vercel.app')
+                dashboard_url = f"{ui_base}?r={ws_tunnel}&k={server.secret_key}&a={agent}"
                 
-                click.secho(f"      [OK] Relay authenticated", fg="green")
-                click.secho(f"      Session: {session_id}", fg="blue", bold=True)
-            else:
-                click.secho("      [!] Relay offline — using local mode", fg="yellow")
-                local_mode = True
-        else:
-            click.echo("[2/5] Skipping relay (local mode)")
-        
-        # ── Step 3: Auto-start Agent ───────────────────────────
+                click.secho(f"      [OK] Pinggy Tunnel: {public_url}", fg="green")
+                click.secho(f"      Remote Dashboard: {dashboard_url}", fg="cyan", bold=True)
+            except Exception as e:
+                click.secho(f"      [!] Tunnel failed: {e}", fg="yellow")
+                is_local = True
+
+        # Agent spawn
         click.echo(f"[3/5] Spawning agent ({agent})...")
+        agent_config = {"working_dir": workspace_path}
         
-        # Build agent config — merge agents.toml with CLI overrides
-        agent_config = {
-            "working_dir": workspace_path,
-        }
-        
-        # Load agents.toml config for this agent
-        try:
-            if sys.version_info >= (3, 11):
-                import tomllib
-            else:
-                import tomli as tomllib
-            
-            agents_cfg_path = Path("agents.toml")
-            if agents_cfg_path.exists():
-                with open(agents_cfg_path, "rb") as f:
-                    agents_data = tomllib.load(f)
-                    # Try exact name first, then 'antigravity-agent' default
-                    for key in [agent, "antigravity-agent"]:
-                        if key in agents_data:
-                            agent_config.update(agents_data[key])
-                            break
-        except Exception:
-            pass
-        
-        # CLI command override
-        if agent_cmd:
-            agent_config["command"] = agent_cmd
-        
-        # Start the agent via handler
         try:
             from .models import LogEntry
             from .adapters import AdapterRegistry
             
             async def emit_callback(entry: LogEntry):
-                # We echo to terminal so mirror_mode.py can scrape the port/status
-                # and the user can see live mirrored output.
                 color = "cyan" if entry.stream == "stderr" else None
-                try:
-                    click.secho(entry.data, fg=color)
-                except UnicodeEncodeError:
-                    # Fallback for terminals with limited charmaps
-                    sanitized = entry.data.encode('ascii', errors='replace').decode('ascii')
-                    click.secho(sanitized, fg=color)
+                try: click.secho(entry.data, fg=color)
+                except: pass
                 await server._stream_router.emit(entry)
             
-            from .adapters import AdapterRegistry
             adapter = AdapterRegistry.get(agent, emit_callback)
             await adapter.start(agent_config)
             
-            # Store in handler's active adapters
             if server._handler:
                 server._handler._active_adapters[agent] = adapter
-                # Start streaming task
                 asyncio.create_task(adapter.stream_output())
             
-            pid_str = getattr(adapter, "pid", "N/A")
-            click.secho(f"      [OK] Agent spawned (PID: {pid_str})", fg="green")
+            click.secho(f"      [OK] Agent spawned (PID: {getattr(adapter, 'pid', 'N/A')})", fg="green")
         except Exception as e:
             click.secho(f"      [!] Agent spawn failed: {e}", fg="red")
-            click.echo("      Dashboard will still work, start agent manually from UI")
-        
-        # ── Step 4: Access Info Retrieval ──────────────────────
+
+        # Access Info
         click.echo("[4/5] Generating access...")
+        local_ui_base = config.daemon.get('local_ui_url', 'http://localhost:5173')
+        ws_local = f"ws://localhost:{actual_port}/ws"
+        local_dashboard_url = f"{local_ui_base}?r={ws_local}&k={server.secret_key}&a={agent}"
+        
+        click.echo("")
+        click.secho(f"  [+] Local Dashboard:  {local_dashboard_url}", fg="green", bold=True)
         
         if dashboard_url:
             if not headless:
                 click.echo("")
                 click.secho("  +-------------------------------------+", fg="magenta")
-                click.secho("  |   Scan QR to control from phone:    |", fg="magenta")
+                click.secho("  |   Scan QR for phone control:        |", fg="magenta")
                 click.secho("  +-------------------------------------+", fg="magenta")
                 click.echo("")
-                
                 try:
-                    qr_text = QRGenerator.to_terminal(dashboard_url)
-                    click.echo(qr_text)
-                except Exception:
-                    click.echo("  (QR generation failed - use link below)")
+                    click.echo(QRGenerator.to_terminal(dashboard_url))
+                except: pass
                 
                 click.echo("")
-                click.secho(f"  [+] Dashboard: {dashboard_url}", fg="cyan", bold=True)
-                click.echo(f"  [+] Secret:    {server.secret_key}")
+                click.secho(f"  [+] Remote Dashboard: {dashboard_url}", fg="cyan", bold=True)
+                click.echo(f"  [+] Secret Key:       {server.secret_key}")
                 click.echo("")
             else:
-                # Still show basic link in headless
-                click.secho(f"  [+] Dashboard: {dashboard_url}", fg="cyan", bold=True)
-                click.echo(f"  [+] Secret:    {server.secret_key}")
+                click.secho(f"  [+] Remote Dashboard: {dashboard_url}", fg="cyan", bold=True)
         else:
-            # Fallback to Local mode display
-            ws_url = f"ws://localhost:{actual_port}/ws"
-            ui_base = config.daemon.get('local_ui_url', 'http://localhost:5173')
-            local_ui_url = f"{ui_base}?r={ws_url}&k={server.secret_key}&a={agent}"
+            click.echo(f"  [+] Secret Key:       {server.secret_key}")
+            click.secho("      (Tunnel offline - only local access available)", fg="yellow")
 
-            click.echo(f"  [+] Local:     {ws_url}")
-            click.echo(f"  [+] Secret:    {server.secret_key}")
-            click.secho(f"  [+] Dashboard: {local_ui_url}", fg="cyan", bold=True)
-            dashboard_url = local_ui_url
-        
-        # ── Step 5: Auto-open Browser ──────────────────────────
-        if not headless and not no_browser and dashboard_url:
+        # Browser
+        if not headless and not no_browser:
             click.echo("[5/5] Opening dashboard...")
-            try:
-                webbrowser.open(dashboard_url)
-                click.secho("      [OK] Browser opened", fg="green")
-            except Exception:
-                click.echo("      (Could not open browser automatically)")
-        else:
-            click.echo("[5/5] Skipping browser (headless/no-browser)")
+            try: webbrowser.open(local_dashboard_url)
+            except: pass
         
-        # ── Ready ──────────────────────────────────────────────
         click.echo("")
         click.secho("-" * 48, fg="green")
-        click.secho("  [OK] Vision RCP is LIVE - Ready for commands", fg="green", bold=True)
+        click.secho("  [OK] Vision RCP is LIVE", fg="green", bold=True)
         click.secho("-" * 48, fg="green")
-        click.echo("")
-        click.echo("  Send messages from the dashboard and they'll")
-        click.echo("  be forwarded directly to your Antigravity agent.")
-        click.echo("")
-        click.echo("  Press Ctrl+C to stop the session.")
-        click.echo("")
         
-        # Wait for uvicorn to finish (blocks until Ctrl+C)
         await serve_task
-    
+
     try:
         asyncio.run(run_rcp_session())
     except KeyboardInterrupt:
-        click.echo("")
-        click.secho("Stopping Vision-RCP session...", fg="yellow")
-        click.echo("Agent terminated. Daemon stopped. Session ended.")
-    except Exception as e:
-        click.secho(f"\nFatal error: {e}", fg="red")
-        import traceback
-        traceback.print_exc()
+        click.echo("\nStopping...")
 
 
 @cli.command()
