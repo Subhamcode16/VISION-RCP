@@ -579,25 +579,20 @@ class AntigravityAdapter(AgentAdapter):
                     await asyncio.sleep(self.polling_interval)
                     continue
 
-                # Stage 4: Targeted Scan - Only look inside ListItems (Chat Bubbles)
-                # This drastically reduces noise and prevents capturing the Input Box
-                items = await asyncio.to_thread(self.window.descendants, control_type="ListItem")
-                
+                # Stage 21 Universal Vacuum: Captures text by alignment (More robust than ListItem)
+                # This ensures we get both thinking segments AND the final response even if they are in different containers.
+                vacuumed_text = await asyncio.to_thread(self._get_latest_message_text)
                 new_fragments = []
-                for item in items:
-                    try:
-                        # Extract text segments from within this bubble
-                        texts = item.descendants(control_type="Text")
-                        for t in texts:
-                            content = t.window_text().strip()
-                            if not content or len(content) < 2:
-                                continue
-                            
-                            if not self._should_filter(content):
-                                new_fragments.append(content)
-                                self.seen_texts.add(content)
-                    except:
-                        continue
+                
+                if vacuumed_text:
+                    # Filter the entire vacuumed block
+                    # Only treat as 'new' if it's not exactly what we last emitted
+                    if vacuumed_text != self.last_emitted_text:
+                         # Filter lines individually
+                         lines = vacuumed_text.split("\n")
+                         for line in lines:
+                             if not self._should_filter(line.strip()):
+                                 new_fragments.append(line.strip())
 
                 # Stage 5 Fallback: If no ListItems (bubbles) found, perform a 'Safe Zone' scan
                 # This ensures we don't miss text if the agent uses non-standard containers.
@@ -661,12 +656,22 @@ class AntigravityAdapter(AgentAdapter):
                                 if clean_text.startswith(self.last_emitted_text):
                                     is_subset = True
                                     logger.debug(f"Subset detected: ignoring partial overlap.")
+                                    # If the 'subset' is significantly larger (20%), treat as new growth
+                                    if len(clean_text) > len(self.last_emitted_text) * 1.2:
+                                        is_subset = False
 
                             if full_text and not is_duplicate and not is_subset and full_text != self.last_emitted_text:
-                                await self.emit_message(full_text)
-                                self.last_emitted_text = full_text
-                                self.emitted_hashes.append(text_hash)
-                                if len(self.emitted_hashes) > 20: self.emitted_hashes.pop(0)
+                                # Final scrub for any leaking 'thought' headers
+                                meta = ["Acknowledging", "Processing", "Observing", "Thinking", "I'm processing"]
+                                lines = full_text.split("\n")
+                                final_lines = [l for l in lines if not any(l.strip().startswith(m) for m in meta)]
+                                content = "\n".join(final_lines).strip()
+                                
+                                if content:
+                                    await self.emit_message(content)
+                                    self.last_emitted_text = full_text
+                                    self.emitted_hashes.append(text_hash)
+                                    if len(self.emitted_hashes) > 20: self.emitted_hashes.pop(0)
                     except Exception as e:
                         await self.emit_diagnostic(f"[BRIDGE] Join error: {e}")
                         logger.error(f"Semantic join failed: {e}")
