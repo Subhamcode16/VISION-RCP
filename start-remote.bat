@@ -22,7 +22,7 @@ echo.
 chcp 65001 >nul
 
 :: Run the python bootloader
-python remote_boot.py
+python remote_boot_v5.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
