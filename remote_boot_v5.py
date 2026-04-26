@@ -112,9 +112,8 @@ async def main():
     # Pre-Flight Cleanup: Ensure no ghosts are locking files or ports
     log("Pre-flight cleanup: Clearing the runway...")
     try:
-        # Kill any cloudflared, relay, or daemon ghosts
-        for proc_name in ["cloudflared.exe", "python.exe"]:
-            subprocess.run(["taskkill", "/F", "/IM", proc_name, "/T"], 
+        # Kill only cloudflared. Killing python.exe kills the bootloader itself!
+        subprocess.run(["taskkill", "/F", "/IM", "cloudflared.exe", "/T"], 
                          stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
     except: pass
     await asyncio.sleep(1)

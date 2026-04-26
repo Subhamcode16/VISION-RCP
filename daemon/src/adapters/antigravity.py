@@ -487,19 +487,20 @@ class AntigravityAdapter(AgentAdapter):
                 return ""
             
             # 2. Identify and Cluster AI Fragments (Absolute Alignment)
-            # AI messages are ALWAYS on the left (usually < 450px)
-            # User messages are ALWAYS on the right (usually > 500px)
+            # Calibrated: AI is on the right (L > 1000), User on left (L < 500)
             message_cluster = []
             
             for item in text_bearing:
-                rect = item.rectangle()
-                # 100px to 450px is the "AI Zone" (handles most resolutions)
-                if 50 < rect.left < 450:
-                    message_cluster.append(item)
+                try:
+                    rect = item.rectangle()
+                    # The Diagnostic pulse shows AI responses at L:1698
+                    if rect.left > 1000:
+                        message_cluster.append(item)
+                except: continue
             
             if not message_cluster:
                 # Fallback: Capture everything if the UI is very compact
-                message_cluster = [it for it in text_bearing if it.rectangle().left < 400]
+                message_cluster = [it for it in text_bearing if it.rectangle().left > 800]
             
             # 3. Sort by screen position (Top-to-Bottom)
             message_cluster.sort(key=lambda x: x.rectangle().top)
