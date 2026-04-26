@@ -39,7 +39,12 @@ async def run_tunnel(port: int):
     log("Using File-Pipe strategy for maximum reliability.")
     
     log_file = Path("tunnel_boot.log")
-    if log_file.exists(): log_file.unlink()
+    try:
+        if log_file.exists(): 
+            log("Clearing old tunnel logs...")
+            log_file.unlink(missing_ok=True)
+    except Exception as e:
+        log(f"Warning: Could not clear log file (might be locked): {e}")
 
     # Launch cloudflared and use NATIVE logfile support
     # This is the most reliable way to ensure output is flushed to disk
@@ -102,16 +107,25 @@ async def run_daemon(relay_public_url: str):
     return proc
 
 async def main():
-    log("=== Vision-RCP Remote Bridge Side Quest ===")
+    log("=== Vision-RCP Remote Bridge Final Payload ===")
     
+    # Pre-Flight Cleanup: Ensure no ghosts are locking files or ports
+    log("Pre-flight cleanup: Clearing the runway...")
+    try:
+        # Kill any cloudflared, relay, or daemon ghosts
+        for proc_name in ["cloudflared.exe", "python.exe"]:
+            subprocess.run(["taskkill", "/F", "/IM", proc_name, "/T"], 
+                         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    except: pass
+    await asyncio.sleep(1)
+
     relay_proc = None
     tunnel_proc = None
     daemon_proc = None
     
     try:
-        # 1. Start Tunnel FIRST (provides the public URL needed by daemon)
+        # 1. Start Tunnel FIRST
         log("Establishing Cloudflare Tunnel (be patient)...")
-        log("Note: This can take 5-15 seconds on some networks.")
         tunnel_proc, public_url = await run_tunnel(RELAY_PORT)
         if not public_url:
             log("FAILED: Could not establish tunnel.")
