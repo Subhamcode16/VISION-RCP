@@ -1,3 +1,12 @@
+import sys
+import io
+
+# Stage 26: Forced Encoding Protocol (UTF-8)
+if sys.platform == "win32":
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except: pass
+
 import asyncio
 import os
 import sys
@@ -142,7 +151,7 @@ async def main():
         # 4. Wait for daemon to finish or for interrupt
         await daemon_proc.wait()
         
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         log("Shutting down remote bridge...")
     finally:
         # Safely shut down all processes
@@ -158,4 +167,11 @@ async def main():
 if __name__ == "__main__":
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    asyncio.run(main())
+    
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Already handled in finally block of main()
+        pass
+    except Exception as e:
+        log(f"Crash: {e}")

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -161,11 +162,22 @@ class RCPServer:
         self._actual_port = port
         
         def provide_session():
+            import socket
             res = {}
             if self._relay_client:
+                # Defensive check for network attribute
+                device_name = socket.gethostname()
+                try:
+                    if hasattr(self._config, "network"):
+                        device_name = self._config.network.get("device_name", device_name)
+                    elif isinstance(self._config, dict) and "network" in self._config:
+                        device_name = self._config["network"].get("device_name", device_name)
+                except:
+                    pass
+
                 res.update({
                     "session_id": self._relay_client.session_id,
-                    "device_name": self._config.network.get("device_name", "unknown")
+                    "device_name": device_name
                 })
             
             # Inject active agent status if handler is available

@@ -7,9 +7,32 @@ import time
 import ctypes
 import re
 from ctypes import wintypes
+from pathlib import Path
 from typing import Dict, Any, Callable, Coroutine, Optional, List
 from .base import AgentAdapter
 from ..models import LogEntry
+
+import sys
+import io
+import hashlib
+import random
+
+# Stage 26: Forced Encoding Protocol (UTF-8)
+# This prevents 'charmap' crashes when scraping emojis/rich text from Windows GUI.
+if sys.platform == "win32":
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except: pass
+
+def safe_log(msg: str):
+    """Bridge log that ensures no UnicodeEncodeError on Windows terminals."""
+    try:
+        print(msg)
+    except:
+        try:
+            print(msg.encode('ascii', 'replace').decode('ascii'))
+        except:
+            pass
 
 # --- C-Level Window Helpers (64-bit Safe) ---
 def _get_active_window_titles() -> List[str]:
@@ -107,6 +130,15 @@ class AntigravityAdapter(AgentAdapter):
         self.emitted_hashes: List[str] = [] # Stage 15: Store last 20 message hashes
         self.last_user_query = "" # Stage 16: For echo scrubbing
         self.is_bootstrapped = False
+        self.monitor_cycle = 0
+        
+        # Sentinel Watcher State
+        self.sentinel_enabled = True
+        self.last_sentinel_action_time = 0.0
+        self.risky_patterns = [
+            re.compile(r"(rm -rf|del /s|format|mkfs|shred|wget|curl.*bash|sudo)", re.I),
+            re.compile(r"(mv .*\/dev\/null|>\s*\/dev\/sd|partition)", re.I)
+        ]
         
         # Noise filter patterns
         self.noise_patterns = [
@@ -146,12 +178,10 @@ class AntigravityAdapter(AgentAdapter):
             re.compile(r"^(Generating|Analyzing|Starting|Connecting|Stopping|Retrying|Searching|Found|Success|Completed).{1,5}$", re.I),
             re.compile(r"^(Acknowledging|Processing|Observing|I'm processing|Reconciling|Observed|However, I've).*", re.I),
             re.compile(r"^(metadata|keyboardinterrupt|manually terminated|apparent interruption).*", re.I),
-            # Stage 22: Enhanced Meta-Commentary Purge
             re.compile(r"Acknowledge and Contextualize", re.I),
             re.compile(r"see the user's greeting", re.I),
             re.compile(r"priority is to acknowledge", re.I),
-            re.compile(r"follow global rule", re.I),
-            re.compile(r"asking \d+-\d+ mandatory questions", re.I)
+            re.compile(r"follow global rule", re.I)
         ]
 
         # Bootstrap patterns (Redirect to terminal, not chat)
@@ -186,6 +216,11 @@ class AntigravityAdapter(AgentAdapter):
             re.compile(r"system32", re.I)
         ]
         self.last_sentinel_action_time = 0.0
+        
+        # Pulse Logging State
+        self.data_dir: Optional[Path] = None
+        self.pulse_log_path: Optional[Path] = None
+        self.enable_pulse_terminal_logging = False
 
     async def start(self, config: Dict[str, Any]) -> None:
         """Connect to the running Antigravity application (Non-blocking)."""
@@ -194,6 +229,8 @@ class AntigravityAdapter(AgentAdapter):
         self.window_title_re = config.get("window_title_re", ".*Antigravity.*")
         self.polling_interval = config.get("polling_interval_ms", 500) / 1000.0
         self.retry_count = 0
+        self.data_dir = Path(config.get("data_dir", "."))
+        self.pulse_log_path = self.data_dir / "pulse_debug.log"
         
         # Start the connection process and watchdog in the background
         # This returns immediately so the daemon doesn't time out the request
@@ -306,6 +343,16 @@ class AntigravityAdapter(AgentAdapter):
             logger.info(f"Scraper bootstrapped with {len(self.seen_texts)} existing text segments.")
         except Exception as e:
             logger.error(f"Snapshot failed: {e}")
+
+    def _log_pulse(self, msg: str):
+        """Append diagnostic pulse to a dedicated log file."""
+        if not self.pulse_log_path:
+            return
+        try:
+            with open(self.pulse_log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+        except:
+            pass
 
     def _should_filter(self, text: str) -> bool:
         """Check if a text segment is UI noise or already seen."""
@@ -464,8 +511,9 @@ class AntigravityAdapter(AgentAdapter):
             # 1. Capture EVERYTHING that has text (Targeted Scans for Speed)
             text_bearing = []
             candidates = []
-            # Extended search for more UI types (Group, Pane, and Custom often hold text in newer VS Code)
-            for c_type in ["ListItem", "Text", "Static", "Group", "Pane", "Custom"]:
+            # Use a targeted list: ListItem (messages), Text/Static (raw text)
+            # AVOID: 'Pane', 'Group', 'Custom' as they are extremely slow in large windows.
+            for c_type in ["ListItem", "Text", "Static"]:
                 try: candidates.extend(self.window.descendants(control_type=c_type))
                 except: continue
                 
@@ -475,8 +523,12 @@ class AntigravityAdapter(AgentAdapter):
                     txt = it.window_text().strip()
                     if txt:
                         if debug_pulse:
-                            # FORCE PRINT to terminal so it's not buried in logs
-                            print(f" [DB-PULSE] L:{rect.left} T:{rect.top} | '{txt[:40]}...'")
+                            # Redirected to pulse_debug.log to keep active logs clean
+                            msg = f" [DB-PULSE] L:{rect.left} T:{rect.top} | '{txt[:40]}...'"
+                            self._log_pulse(msg)
+                            
+                            if self.enable_pulse_terminal_logging:
+                                safe_log(msg)
                         
                         # Filter noise
                         if len(txt) > 1 and not any(n in txt for n in ["Copy", "Retry", "Undo", "Thought for", "Analysing", "Evaluating", "Thinking", "Processing"]):
@@ -486,39 +538,69 @@ class AntigravityAdapter(AgentAdapter):
             if not text_bearing:
                 return ""
             
-            # 2. Identify and Cluster AI Fragments (Absolute Alignment)
-            # Calibrated: AI is on the right (L > 1000), User on left (L < 500)
+            # 2. Identify and Cluster AI Fragments (Relative Alignment)
+            # Alignment logic: AI is on the far right (Sidebar). 
+            # We narrow the scan to the right-most 30% of the window to avoid terminal lists.
+            window_rect = self.window.rectangle()
+            right_zone_start = window_rect.left + int(window_rect.width() * 0.7)
+            
+            # Vertical Guards: Avoid the top title bar and bottom status/terminal bar
+            top_guard = window_rect.top + 80
+            bottom_guard = window_rect.bottom - 80
+            
             message_cluster = []
             
             for item in text_bearing:
                 try:
                     rect = item.rectangle()
-                    # The Diagnostic pulse shows AI responses at L:1698
-                    if rect.left > 1000:
+                    # Coordinate Filter: Only far right, middle height
+                    if rect.left > right_zone_start and rect.top > top_guard and rect.bottom < bottom_guard:
                         message_cluster.append(item)
                 except: continue
             
             if not message_cluster:
-                # Fallback: Capture everything if the UI is very compact
-                message_cluster = [it for it in text_bearing if it.rectangle().left > 800]
+                return ""
             
-            # 3. Sort by screen position (Top-to-Bottom)
-            message_cluster.sort(key=lambda x: x.rectangle().top)
+            # 4. Filter for NEW fragments and Skip 'Thinking' logs
+            new_cluster = []
+            for item in message_cluster:
+                try:
+                    txt = item.window_text().strip()
+                    # Skip internal monologue headers
+                    if txt.lower().startswith(("thinking", "analyzing", "thought for")):
+                        continue
+                        
+                    # Skip terminal noise tabs (captured by coordinate, but extra safety)
+                    if any(n in txt.lower() for n in ["powershell", "python", "terminal", "cmd.exe"]):
+                        continue
+
+                    if txt and txt not in self.seen_texts:
+                        new_cluster.append(item)
+                except: continue
+
+            if not new_cluster:
+                return ""
+
+            # 5. Sort by screen position (Top-to-Bottom)
+            new_cluster.sort(key=lambda x: x.rectangle().top)
             
-            # 4. Semantic Deduplication (Remove fragments contained within larger fragments)
-            raw_fragments = [p.window_text().strip() for p in message_cluster]
+            # 6. Extract text and Join
+            raw_fragments = [p.window_text().strip() for p in new_cluster]
             final_fragments = []
             
-            for i, frag in enumerate(raw_fragments):
-                # Only add if this fragment isn't already a part of a larger, surrounding fragment
-                is_subset = False
-                for j, other in enumerate(raw_fragments):
-                    if i != j and frag in other and len(other) > len(frag):
-                        is_subset = True
-                        break
-                
-                if not is_subset and frag not in final_fragments:
+            for frag in raw_fragments:
+                if frag and frag not in final_fragments:
                     final_fragments.append(frag)
+            
+            full_text = " ".join(final_fragments).strip()
+            
+            # FINAL GUARD: If the bubble is currently being updated (Thinking...), wait for it to finish
+            if full_text.lower().startswith(("thinking", "analyzing", "thought for")):
+                return ""
+            
+            # Emit diagnostic for future debugging (identifying coordinate blocks)
+            if final_fragments:
+                logger.debug(f"[SCRAPER-CALIBRATION] X > {right_zone_start}, Y: {top_guard}-{bottom_guard}")
             
             return "\n".join(final_fragments)
         except Exception as e:
@@ -528,11 +610,21 @@ class AntigravityAdapter(AgentAdapter):
     async def send_message(self, message: str) -> None:
         """Inject the user message into the Antigravity (VS Code Sidebar) chat input."""
         if not self.is_running or not self.window:
-            await self.emit_message(f"[STUB ECHO]: {message}")
+            await self.emit_diagnostic("Error: Cannot send message. Session inactive or window lost.")
             return
 
         try:
-            # 1. Target strategy: Try standard 'Message input' first, then common VS Code patterns
+            # 1. Force Focus and Reveal
+            try:
+                if self.window.is_minimized():
+                    self.window.restore()
+                self.window.set_focus()
+                self.window.set_foreground()
+                await asyncio.sleep(0.3)
+            except:
+                pass
+
+            # 2. Target strategy: Try standard 'Message input' first
             input_box = None
             strategies = [
                 {"title": "Message input", "control_type": "Edit"},
@@ -543,8 +635,9 @@ class AntigravityAdapter(AgentAdapter):
 
             for strategy in strategies:
                 try:
+                    # Faster existence check
                     target = self.window.child_window(**strategy)
-                    if target.exists(timeout=1):
+                    if await asyncio.to_thread(target.exists, timeout=0.1):
                         input_box = target
                         break
                 except:
@@ -552,30 +645,32 @@ class AntigravityAdapter(AgentAdapter):
 
             if not input_box:
                 # Fallback: Just try to type if the window is focused
-                await self.emit_diagnostic("Warning: Exact chat input not found. Attempting global keys...")
-                self.window.set_focus()
-                await asyncio.sleep(0.2)
+                await self.emit_diagnostic("Warning: Exact chat input not found. Attempting raw keystrokes...")
+                # Clear any existing text first
+                self.window.type_keys("^a{BACKSPACE}", with_spaces=True)
+                await asyncio.sleep(0.1)
                 self.window.type_keys(message + "{ENTER}", with_spaces=True)
-                return
+            else:
+                # Direct Injection
+                input_box.set_focus()
+                # Clear any ghost text
+                input_box.type_keys("^a{BACKSPACE}", with_spaces=True)
+                await asyncio.sleep(0.1)
+                input_box.type_keys(message + "{ENTER}", with_spaces=True)
+                await self.emit_diagnostic(f"Message injected via '{input_box.window_text() or 'Input'}'")
             
-            # 2. Focus and Type
-            input_box.set_focus()
-            await asyncio.sleep(0.5) # Allow focus animation
-            input_box.type_keys(message + "{ENTER}", with_spaces=True, set_foreground=True)
-            
-            # Proactively filter the input to avoid an echo bubble in the dashboard
+            # 3. Post-Send State Management
             self.seen_texts.add(message)
-            self.last_user_query = message # Stage 16: Save for scrubbing
-            import hashlib
+            self.last_user_query = message 
             msg_hash = hashlib.sha256(message.strip().encode()).hexdigest()
             self.emitted_hashes.append(msg_hash)
             if len(self.emitted_hashes) > 20: self.emitted_hashes.pop(0)
             
             self.last_emitted_text = message
-            self.last_send_time = time.time() # Start the ignore-echo period
-
-            # Reset thinking state for the new turn
-            self.is_thinking = False
+            self.last_send_time = time.time() 
+            self.is_thinking = True # Expect response
+            
+            await self.emit_diagnostic(f" [SEND] Successfully injected prompt: '{message[:30]}...'")
             
         except Exception as e:
             logger.error(f"Failed to send message via UI: {e}")
@@ -583,8 +678,6 @@ class AntigravityAdapter(AgentAdapter):
 
     async def stream_output(self) -> None:
         """Background loop with intelligent paragraph merging and vibe status."""
-        import random
-        
         while self.is_running:
             try:
                 if not self.window or not self.is_bootstrapped:
@@ -606,47 +699,19 @@ class AntigravityAdapter(AgentAdapter):
                 
                 new_fragments = []
                 
+                # Stage 5: Incremental Processing
                 if vacuumed_text:
-                    # Filter the entire vacuumed block
-                    # Only treat as 'new' if it's not exactly what we last emitted
-                    if vacuumed_text != self.last_emitted_text:
-                         # Filter lines individually
-                         lines = vacuumed_text.split("\n")
-                         for line in lines:
-                             if not self._should_filter(line.strip()):
-                                 new_fragments.append(line.strip())
+                    # Capture new segments and mark them as seen
+                    lines = [l.strip() for l in vacuumed_text.split("\n") if l.strip()]
+                    for l in lines:
+                        if not self._should_filter(l):
+                            new_fragments.append(l)
+                            self.seen_texts.add(l)
 
-                # Stage 5 Fallback: If no ListItems (bubbles) found, perform a 'Safe Zone' scan
-                # This ensures we don't miss text if the agent uses non-standard containers.
-                if not new_fragments:
-                    try:
-                        window_rect = self.window.rectangle()
-                        window_height = window_rect.height()
-                        safety_threshold = window_rect.top + (window_height * 0.75) # Upper 75% focus
-
-                        all_texts = await asyncio.to_thread(self.window.descendants, control_type="Text")
-                        for t in all_texts:
-                            rect = t.rectangle()
-                            content = t.window_text().strip()
-                            
-                            # Skip if in the 'Input Safety Zone' (bottom 25% of window)
-                            # Alignment logic: AI text is usually left-aligned but with a margin.
-                            # We accept everything above 100px to handle small resolutions.
-                            if rect.left > 100:
-                                if rect.top > safety_threshold:
-                                    continue
-                            
-                            if content and len(content) > 1 and not self._should_filter(content):
-                                new_fragments.append(content)
-                                self.seen_texts.add(content)
-                    except:
-                        pass
-
-                # Supplemental Thinking Check (still useful for status)
-                # We do a targeted check for '...' text that might be global
-                all_texts = await asyncio.to_thread(self.window.descendants, control_type="Text")
-                found_thinking_indicator = any(t.window_text().strip() == "..." for t in all_texts[:50])
-
+                # Supplemental Thinking Check (O(1) lookahead)
+                # We skip the heavy scan and rely on the vacuumed fragments
+                found_thinking_indicator = "..." in vacuumed_text
+                
                 # 3. Handle Fragment Buffering
                 if new_fragments:
                     self.emit_buffer.extend(new_fragments)
@@ -667,25 +732,8 @@ class AntigravityAdapter(AgentAdapter):
                             logger.info(f"BRIDGE_FINAL_RESPONSE: {full_text[:100]}...")
                             await self.emit_diagnostic(f"[BRIDGE] Flushed response ({len(snapshot)} frags).")
                             
-                            # Hash-based deduplication guard (Stage 15)
-                            import hashlib
-                            clean_text = full_text.strip()
-                            text_hash = hashlib.sha256(clean_text.encode()).hexdigest()
-                            
-                            is_duplicate = text_hash in self.emitted_hashes
-                            
-                            # Subset Guard: If this new text contains the previous emitted text 
-                            # as a prefix, it's just a more complete capture of the same message.
-                            is_subset = False
-                            if self.last_emitted_text and len(clean_text) > len(self.last_emitted_text):
-                                if clean_text.startswith(self.last_emitted_text):
-                                    is_subset = True
-                                    logger.debug(f"Subset detected: ignoring partial overlap.")
-                                    # If the 'subset' has grown at all, we check if it's significant growth
-                                    if len(clean_text) > len(self.last_emitted_text) + 1:
-                                        is_subset = False
-
-                            if full_text and not is_duplicate and not is_subset and full_text != self.last_emitted_text:
+                            # Incremental scrapers don't need subset guards anymore
+                            if full_text and full_text != self.last_emitted_text:
                                 # Final non-destructive scrub for internal monologue
                                 meta_markers = ["Processing", "Thinking", "I'm processing"] 
                                 lines = full_text.split("\n")
@@ -723,8 +771,10 @@ class AntigravityAdapter(AgentAdapter):
                                 if content:
                                     await self.emit_message(content)
                                     self.last_emitted_text = full_text
-                                    self.emitted_hashes.append(text_hash)
+                                    
+                                    # Snapshot for subset prevention
                                     if len(self.emitted_hashes) > 20: self.emitted_hashes.pop(0)
+                                    self.emitted_hashes.append(content[:50]) # Use prefix as identifier
                     except Exception as e:
                         await self.emit_diagnostic(f"[BRIDGE] Join error: {e}")
                         logger.error(f"Semantic join failed: {e}")
@@ -746,17 +796,21 @@ class AntigravityAdapter(AgentAdapter):
             return
 
         try:
+            self.monitor_cycle += 1 
             # 1. Look for the 'Run command?' trigger
-            trigger = self.window.child_window(title="Run command?", control_type="Text")
-            if not await asyncio.to_thread(trigger.exists, timeout=0.1):
+            trigger = self.window.child_window(title_re=".*Run command.*", control_type="Text")
+            if not await asyncio.to_thread(trigger.exists, timeout=0.5):
                 return
 
-            # 2. Extract the command text (usually in a sibling or nearby group)
-            # We look for the first 'Text' or 'Edit' element that looks like a command block
+            # Heartbeat for debugging
+            if self.monitor_cycle % 5 == 0:
+                await self.emit_diagnostic("🛡️ [SENTINEL] Pulse: Active and scanning for prompts...")
+
+            # 2. Extract the command text
             descendants = await asyncio.to_thread(self.window.descendants)
             trigger_idx = -1
             for i, d in enumerate(descendants):
-                if d.window_text() == "Run command?":
+                if "Run command?" in d.window_text():
                     trigger_idx = i
                     break
             

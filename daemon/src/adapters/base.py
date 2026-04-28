@@ -45,12 +45,17 @@ class AgentAdapter(abc.ABC):
 
     async def emit_message(self, content: str) -> None:
         """Helper to emit an AGENT_MESSAGE log entry."""
+        # Stage 25: Critical Bridge Log
+        # This confirms that the message has been captured and is ready for the relay.
+        ts = time.time()
+        print(f" [BRIDGE] -> AGENT_MESSAGE: '{content[:100]}...' (len: {len(content)})")
+        
         entry = LogEntry(
             pid=-1,  # Agent adapters might not have a traditional PID
             name=self.name,
             stream="agent_message",
             data=content,
-            ts=time.time()
+            ts=ts
         )
         await self.emit_callback(entry)
 

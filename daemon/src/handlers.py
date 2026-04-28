@@ -337,6 +337,7 @@ class CommandHandler:
         except Exception:
             pass
             
+        import socket
         return {
             "active": True,
             "session_id": info.get("session_id", "LOCAL"),
@@ -380,9 +381,13 @@ class CommandHandler:
             return {"status": "already_running"}
 
         async def emit_callback(entry: LogEntry):
-            await self._sr.emit(entry)
+            try:
+                await self._sr.emit(entry)
+            except Exception as e:
+                logger.error(f"Failed to emit agent message to relay: {e}")
 
         adapter = AdapterRegistry.get(name, emit_callback)
+        merged_config["data_dir"] = str(self._config.data_dir)
         await adapter.start(merged_config)
         self._active_adapters[name] = adapter
 
