@@ -1,8 +1,40 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 export const VideoDemo: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (videoRef.current) {
+            if (entry.isIntersecting) {
+              videoRef.current.play().catch((err) => {
+                console.warn("Autoplay was prevented:", err);
+              });
+              setIsPlaying(true);
+            } else {
+              videoRef.current.pause();
+              setIsPlaying(false);
+            }
+          }
+        });
+      },
+      { threshold: 0.4 } // Trigger when 40% of the component is visible
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, []);
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -16,14 +48,15 @@ export const VideoDemo: React.FC = () => {
   };
 
   return (
-    <div className="video-demo-container group" onClick={togglePlay}>
+    <div ref={containerRef} className="video-demo-container group" onClick={togglePlay}>
       <div className="video-inner shadow-2xl shadow-blue-500/10">
         <video 
           ref={videoRef}
           className="w-full h-full object-cover"
-          poster="/videos/demo-video-poster.jpg" // Optional: we could generate a frame if needed
+          poster="/videos/demo-video-poster.jpg"
           loop
           playsInline
+          muted // Required for autoplay in most browsers
         >
           <source src="/videos/demo-video.mp4" type="video/mp4" />
           Your browser does not support the video tag.
@@ -83,4 +116,5 @@ export const VideoDemo: React.FC = () => {
     </div>
   );
 };
+
 
