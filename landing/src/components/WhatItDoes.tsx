@@ -3,7 +3,7 @@ import { SectionWrapper } from './ui/SectionWrapper';
 
 export const WhatItDoes: React.FC = () => {
   return (
-    <SectionWrapper id="features" className="what-it-does-section">
+    <SectionWrapper id="features" className="what-it-does-section" showBackground={true}>
       <div className="section-header text-center mb-16">
         <h1 className="section-header-h1">The Brain of your Agent Fleet</h1>
         <p className="section-subtitle text-neutral text-lg md:text-xl max-w-2xl mx-auto">Vision-RCP doesn't just monitor; it orchestrates the entire specialized Antigravity ecosystem.</p>

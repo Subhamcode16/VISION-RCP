@@ -8,13 +8,15 @@ interface SectionWrapperProps {
   className?: string;
   id?: string;
   particleColor?: string;
+  showBackground?: boolean;
 }
 
 export const SectionWrapper: React.FC<SectionWrapperProps> = ({ 
   children, 
   className, 
   id,
-  particleColor = "#ffffff" 
+  particleColor = "#ffffff",
+  showBackground = false
 }) => {
   return (
     <section 
@@ -23,11 +25,13 @@ export const SectionWrapper: React.FC<SectionWrapperProps> = ({
       style={{ padding: '8rem 0' }}
     >
       {/* Background Layer */}
-      <NeuralBackground 
-        color={particleColor} 
-        trailOpacity={0.1}
-        speed={0.5}
-      />
+      {showBackground && (
+        <NeuralBackground 
+          color={particleColor} 
+          trailOpacity={0.1}
+          speed={0.5}
+        />
+      )}
       
       {/* Content Layer */}
       <motion.div

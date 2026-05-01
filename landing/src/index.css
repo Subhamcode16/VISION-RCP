@@ -62,6 +62,10 @@
   @apply text-4xl md:text-6xl font-extrabold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-white/90 to-white/60 text-center uppercase py-2;
 }
 
+@utility text-glow {
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
+}
+
 :root {
   font-family: var(--font-sans);
   line-height: 1.5;
