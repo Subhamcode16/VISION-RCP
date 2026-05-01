@@ -32,8 +32,9 @@ function HeroVideo({
         <div className="relative min-h-screen w-full flex flex-col items-center bg-[#000000]">
             
             {/* 1. TEXT SECTION (Free Space) */}
-            <div className="relative z-10 w-full pt-48 pb-32 px-4 md:px-6">
-                <div className="max-w-6xl mx-auto text-center flex flex-col items-center">
+            <div className="relative z-10 w-full pt-48 pb-32 px-6 md:px-12">
+                <div className="max-w-7xl mx-auto text-center flex flex-col items-center">
+
                     {/* Badge */}
                     <motion.div
                         custom={0}

@@ -45,34 +45,33 @@ const App: React.FC = () => {
           </div>
         </HeroVideo>
 
-        <div className="max-w-7xl mx-auto px-6">
-          <WhatItDoes />
-          
-          <TrustSignals />
+        <WhatItDoes />
+        
+        <TrustSignals />
 
-          <DeploymentTimeline />
+        <DeploymentTimeline />
 
-          <SectionWrapper>
-            <div className="text-center mb-16 px-4">
-              <h1 className="section-header-h1">See it in Action</h1>
-              <p className="text-neutral text-lg md:text-xl max-w-2xl mx-auto">Experience the power of low-latency remote control with our hardware-grade demonstration.</p>
-            </div>
-            <VideoDemo />
-          </SectionWrapper>
+        <SectionWrapper>
+          <div className="text-center mb-16 px-4">
+            <h1 className="section-header-h1">See it in Action</h1>
+            <p className="text-neutral text-lg md:text-xl max-w-2xl mx-auto">Experience the power of low-latency remote control with our hardware-grade demonstration.</p>
+          </div>
+          <VideoDemo />
+        </SectionWrapper>
 
-          <Testimonials />
+        <Testimonials />
 
-          <SectionWrapper id="setup">
-            <div className="text-center mb-16 px-4">
-              <h1 className="section-header-h1">Ready to Deploy?</h1>
-              <p className="text-neutral text-lg md:text-xl max-w-2xl mx-auto">Install the CLI agent on your host machine to begin remote orchestration.</p>
-            </div>
-            <SetupTerminal />
-          </SectionWrapper>
-        </div>
+        <SectionWrapper id="setup">
+          <div className="text-center mb-16 px-4">
+            <h1 className="section-header-h1">Ready to Deploy?</h1>
+            <p className="text-neutral text-lg md:text-xl max-w-2xl mx-auto">Install the CLI agent on your host machine to begin remote orchestration.</p>
+          </div>
+          <SetupTerminal />
+        </SectionWrapper>
 
         <TapedFooter />
       </main>
+
     </div>
   );
 };

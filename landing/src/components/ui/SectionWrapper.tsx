@@ -39,10 +39,11 @@ export const SectionWrapper: React.FC<SectionWrapperProps> = ({
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-100px" }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="relative z-10 max-w-[1200px] mx-auto px-8"
+        className="relative z-10 max-w-[1240px] mx-auto px-10 md:px-16"
       >
         {children}
       </motion.div>
+
     </section>
   );
 };
