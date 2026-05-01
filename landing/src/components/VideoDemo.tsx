@@ -1,74 +1,86 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 
 export const VideoDemo: React.FC = () => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
   return (
-    <div className="video-demo-container">
-      <div className="video-placeholder">
-        <div className="play-button">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="white">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </div>
-        <div className="video-info">
-          <h3>Vision-RCP: Remote Orchestration in Action</h3>
-          <p>Click to watch the demo (Placeholder)</p>
-        </div>
+    <div className="video-demo-container group" onClick={togglePlay}>
+      <div className="video-inner shadow-2xl shadow-blue-500/10">
+        <video 
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          poster="/videos/demo-video-poster.jpg" // Optional: we could generate a frame if needed
+          loop
+          playsInline
+        >
+          <source src="/videos/demo-video.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+        
+        {!isPlaying && (
+          <div className="video-overlay absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] transition-all duration-500 group-hover:bg-black/20">
+            <div className="play-button-outer flex items-center justify-center w-24 h-24 rounded-full border border-white/20 bg-white/10 backdrop-blur-md transition-all duration-300 group-hover:scale-110 group-hover:border-blue-500/50 group-hover:bg-blue-500/20">
+              <div className="play-button-inner flex items-center justify-center w-16 h-16 rounded-full bg-white text-black transition-all duration-300 group-hover:bg-blue-500 group-hover:text-white">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
+            <div className="mt-8 text-center">
+              <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Vision-RCP in Action</h3>
+              <p className="text-white/60 font-medium">Click to see the orchestration bridge live</p>
+            </div>
+          </div>
+        )}
+
+        {isPlaying && (
+          <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+             <div className="px-4 py-2 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs font-mono text-white/80">
+               LIVE RECORDING • 1080P
+             </div>
+          </div>
+        )}
       </div>
+
       <style>{`
         .video-demo-container {
           width: 100%;
-          max-width: 1000px;
-          margin: 4rem auto;
-          aspect-ratio: 16 / 9;
-          background: #18181b;
-          border-radius: 20px;
-          border: 1px solid #27272a;
-          overflow: hidden;
+          max-width: 1100px;
+          margin: 0 auto;
           position: relative;
           cursor: pointer;
-          transition: transform 0.3s ease, border-color 0.3s ease;
         }
-        .video-demo-container:hover {
-          transform: translateY(-4px);
-          border-color: #3b82f6;
-        }
-        .video-placeholder {
+        .video-inner {
           width: 100%;
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: radial-gradient(circle at center, #27272a 0%, #09090b 100%);
+          aspect-ratio: 16 / 9;
+          background: #000;
+          border-radius: 24px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          overflow: hidden;
+          position: relative;
+          transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .play-button {
-          width: 80px;
-          height: 80px;
-          background: rgba(59, 130, 246, 0.2);
-          border: 2px solid #3b82f6;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 20px;
-          transition: all 0.3s ease;
+        .video-demo-container:hover .video-inner {
+          border-color: rgba(59, 130, 246, 0.4);
+          transform: scale(1.01);
         }
-        .video-demo-container:hover .play-button {
-          background: #3b82f6;
-          transform: scale(1.1);
-        }
-        .video-info {
-          text-align: center;
-        }
-        .video-info h3 {
-          font-size: 1.5rem;
-          margin-bottom: 0.5rem;
-          color: white;
-        }
-        .video-info p {
-          color: #a1a1aa;
+        .play-button-outer {
+          box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
         }
       `}</style>
     </div>
   );
 };
+
